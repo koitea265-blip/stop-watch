@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- オフライン/アプリ化用の設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#f2f2f7">
+
+    <title>Canvasストップウォッチ</title>
+    <style>
+        /* 画面全体の固定設定（Chromebook対策） */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* スクロールバーを消す */
+            background-color: #333; /* アプリ外の背景色 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            
+            /* 重要: 画面全体を強制的に固定 */
+            position: fixed;
+            top: 0;
+            left: 0;
+            
+            /* バウンスや全体スクロールを防ぐ */
+            overscroll-behavior: none;
+            touch-action: none; 
+            
+            /* テキスト選択を防止（アプリっぽくする） */
+            user-select: none;
+            -webkit-user-select: none;
+            
+            display: flex;
+            justify-content: center;
+        }
+
+        /* アプリ本体のコンテナ */
+        #app-container {
+            position: relative;
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            background-color: #f2f2f7;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* Canvas */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Canvas上のブラウザ動作を無効化 */
+        }
+
+        /* HTML UI オーバーレイ */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        /* 設定画面パネル */
+        #setup-panel {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            width: 90%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            max-height: 95%; /* 高さを確保 */
+            overflow-y: auto; /* 内容が多い場合はスクロール */
+            z-index: 10;
+        }
+
+        /* アプリタイトル (パネル内) */
+        .app-title {
+            font-size: 28px; /* サイズ調整: 1行に収まるように */
+            font-weight: bold;
+            color: #333; /* 黒色 */
+            text-align: center;
+            margin: 10px 0 15px 0;
+            line-height: 1.2;
+            letter-spacing: 0.02em;
+            white-space: nowrap; /* 折り返し防止 */
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        
+        /* 名簿入力欄の高さを確保 (縮小防止の設定を追加) */
+        #reg-student-list {
+            height: 200px !important;
+            min-height: 200px !important; /* Flexboxによる縮小を防ぐ */
+            flex-shrink: 0; /* 親要素が狭くても縮まないようにする */
+            font-family: monospace;
+            line-height: 1.4;
+            resize: vertical;
+        }
+
+        .html-btn {
+            padding: 12px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            width: 100%;
+            touch-action: manipulation;
+        }
+
+        .btn-outline { background: #fff; color: #007AFF; border: 1px solid #007AFF; }
+        .btn-green { background: #34C759; color: white; }
+        .btn-danger { background: #FF3B30; color: white; }
+        
+        /* ボタン横並び用 */
+        .button-row {
+            display: flex;
+            gap: 8px;
+            justify-content: space-between;
+        }
+        .button-row button {
+            flex: 1; /* 等幅 */
+            padding: 12px 5px; /* 横パディングを減らして文字を入れる */
+            font-size: 14px; /* 少し小さく */
+            white-space: nowrap;
+        }
+
+        #registered-classes-list {
+            font-size: 14px; color: #555; background: #eee;
+            padding: 10px; border-radius: 8px; min-height: 40px;
+        }
+
+        /* --- ヘッダーコントロール (クラス・性別・回数) --- */
+        #header-controls {
+            pointer-events: auto;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            display: none; /* 初期非表示 */
+            z-index: 100;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .control-row:last-child { margin-bottom: 0; }
+
+        #class-selector { flex: 2; padding: 8px; font-weight: bold; }
+        #gender-selector { flex: 1; padding: 8px; }
+
+        .radio-group {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            background: #eee;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .radio-label {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            color: #555;
+            transition: 0.2s;
+        }
+        /* ラジオボタン本体は隠す */
+        .radio-input { display: none; }
+        /* 選択時のスタイル */
+        .radio-input:checked + .radio-label {
+            background: #007AFF;
+            color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        /* --- 記録リスト --- */
+        #record-list-container {
+            pointer-events: auto;
+            position: absolute;
+            /* 初期位置は計測画面用。JSで書き換える */
+            top: 360px; 
+            bottom: 85px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            padding-bottom: 20px;
+        }
+
+        .record-row {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            animation: fadeIn 0.2s ease-out;
+            min-height: 44px;
+        }
+
+        /* --- コンパクトモード (一覧画面用) --- */
+        #record-list-container.compact-mode {
+            gap: 2px; /* 行間を詰める */
+        }
+        #record-list-container.compact-mode .record-row {
+            padding: 4px 10px; /* 上下のパディングを減らす */
+            min-height: 28px;  /* 最小高さを減らす */
+            border-radius: 4px;
+        }
+        #record-list-container.compact-mode .record-row div {
+            font-size: 13px !important; /* 文字サイズも少し小さく */
+        }
+        #record-list-container.compact-mode .record-time {
+            font-size: 15px !important;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .record-info {
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            margin-right: 15px; 
+        }
+
+        .record-rank { font-weight: bold; font-size: 13px; color: #888; }
+        .record-time { font-family: monospace; font-size: 18px; font-weight: bold; color: #333; }
+
+        .record-select {
+            width: 180px; max-width: 55%;
+            padding: 8px; font-size: 14px;
+            background: #fff; border: 1px solid #ddd; border-radius: 6px;
+            touch-action: pan-y;
+        }
+
+        /* コピー用隠し要素 */
+        #clipboard-target { position: absolute; top: -9999px; }
+
+        /* --- モーダル (リセット確認用) --- */
+        #modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center; align-items: center;
+            z-index: 2000; pointer-events: auto;
+            touch-action: none;
+        }
+        
+        #modal-box {
+            background: #fff; padding: 20px; border-radius: 12px;
+            width: 85%; max-width: 350px; text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: popIn 0.2s ease-out;
+            touch-action: auto;
+        }
+
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .modal-buttons { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        .modal-desc { font-size: 12px; font-weight: normal; display: block; margin-top: 2px; opacity: 0.9; }
+        
+        #flash-message {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7); color: white; padding: 15px 25px;
+            border-radius: 10px; z-index: 3000; display: none; pointer-events: none; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="ui-layer">
+            <!-- 設定画面 -->
+            <div id="setup-panel">
+                <!-- タイトル -->
+                <h1 class="app-title">体育ストップウォッチ</h1>
+                
+                <h2 style="margin:0 0 10px 0; font-size:16px; text-align:center; color:#666;">クラス登録</h2>
+                <div style="font-size:12px; color:#666; line-height:1.4;">
+                    ①クラス名と名簿を入力して「追加」<br>
+                    ※ExcelやスプレッドシートからコピペOK<br>
+                    ※「番号 氏名 性別」の順だと自動認識します<br>
+                    （例: 1 山田太郎 男）
+                </div>
+                
+                <input type="text" id="reg-class-name" placeholder="クラス名 (例: 6年1組)">
+                <textarea id="reg-student-list" placeholder="出席番号順に入力&#13;&#10;例1: 山田 太郎 男&#13;&#10;例2: 1 山田 太郎 男 (Excelから貼付)"></textarea>
+                
+                <!-- ボタン横並びエリア -->
+                <div class="button-row">
+                    <button id="btn-add-class" class="html-btn btn-green">リストに追加</button>
+                    <button id="btn-export" class="html-btn btn-outline" style="background:#f0f8ff;">データ保存</button>
+                    <button id="btn-import" class="html-btn btn-outline" style="background:#fff0f5;">データ読込</button>
+                </div>
+                
+                <div style="font-size:12px; margin-top:10px;">登録済みクラス:</div>
+                <div id="registered-classes-list">なし</div>
+                
+                <hr style="width:100%; border:0; border-top:1px solid #ddd; margin:10px 0;">
+                
+                <div style="font-size:12px; color:#666;">②登録が終わったら計測へ</div>
+                <button id="btn-start-app" class="html-btn">計測画面へ</button>
+                
+                <!-- リセットボタン -->
+                <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button id="btn-reset-all" class="html-btn btn-danger" style="font-size: 13px; background-color: #FF3B30;">⚠ 全データ消去 (リセット)</button>
+                </div>
+            </div>
+            
+            <!-- ファイル読み込み用隠しインプット -->
+            <input type="file" id="file-input" style="display:none" accept=".json">
+
+            <!-- ヘッダーコントロール（クラス・性別・回数） -->
+            <div id="header-controls">
+                <div class="control-row">
+                    <select id="class-selector"></select>
+                    <select id="gender-selector">
+                        <option value="ALL">全員</option>
+                        <option value="M">男子</option>
+                        <option value="F">女子</option>
+                    </select>
+                </div>
+                <div class="control-row">
+                    <div class="radio-group">
+                        <input type="radio" name="attempt" id="attempt1" class="radio-input" value="1" checked>
+                        <label for="attempt1" class="radio-label" onclick="app.changeAttempt(1)">1回目</label>
+                        
+                        <input type="radio" name="attempt" id="attempt2" class="radio-input" value="2">
+                        <label for="attempt2" class="radio-label" onclick="app.changeAttempt(2)">2回目</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 記録リスト -->
+            <div id="record-list-container"></div>
+        </div>
+
+        <!-- リセット確認モーダル -->
+        <div id="modal-overlay">
+            <div id="modal-box">
+                <h3 id="modal-title" style="margin:0 0 10px 0; color:#333;">リセット操作</h3>
+                <p style="margin:0; font-size:14px; color:#666;" id="modal-message">操作を選択してください。</p>
+                
+                <!-- 通常のリセット選択肢 (計測画面用) -->
+                <div id="modal-options-default" class="modal-buttons" style="display:none;">
+                    <button id="btn-modal-next-race" class="html-btn btn-green">
+                        続けて計測する
+                        <span class="modal-desc">記録を保存して画面をリセット</span>
+                    </button>
+                    <button id="btn-modal-clear-all" class="html-btn btn-danger">
+                        記録をクリアする
+                        <span class="modal-desc">このクラスの全データを消去</span>
+                    </button>
+                    <button id="btn-modal-cancel" class="html-btn btn-outline">キャンセル</button>
+                </div>
+
+                <!-- 計測画面での全消去確認 -->
+                <div id="modal-options-confirm" class="modal-buttons" style="display:none;">
+                    <p style="color:#FF3B30; font-weight:bold; margin:0;">本当に全消去しますか？<br>この操作は取り消せません。</p>
+                    <button id="btn-modal-confirm-clear" class="html-btn btn-danger">はい、消去します</button>
+                    <button id="btn-modal-confirm-cancel" class="html-btn btn-outline">キャンセル</button>
+                </div>
+
+                <!-- TOP画面での全データ消去確認 -->
+                <div id="modal-options-reset-all" class="modal-buttons" style="display:none;">
+                    <p style="color:#FF3B30; font-weight:bold; margin:0; text-align:left;">
+                        保存されている全てのクラス・名簿・記録データを消去して初期化します。<br>
+                        この操作は取り消せません。<br><br>
+                        本当によろしいですか？
+                    </p>
+                    <button id="btn-modal-reset-all-confirm" class="html-btn btn-danger">全データを消去</button>
+                    <button id="btn-modal-reset-all-cancel" class="html-btn btn-outline">キャンセル</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="flash-message">タイマーをリセットしました</div>
+        <textarea id="clipboard-target"></textarea>
+    </div>
+
+    <script>
+        class App {
+            constructor() {
+                this.container = document.getElementById('app-container');
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.state = 'HOME';
+                this.classes = [];
+                this.currentClassIdx = -1; 
+                this.currentAttempt = 1; 
+                this.filterGender = 'ALL';
+                
+                this.sessionRecords = []; 
+                
+                this.startTime = 0;
+                this.elapsedTime = 0;
+                this.isRunning = false;
+                
+                this.buttons = [];
+                this.activeButton = null;
+                
+                this.sortMode = 'TIME';
+
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                // Canvasイベント
+                this.canvas.addEventListener('mousedown', (e) => this.handleInputStart(e.clientX, e.clientY));
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if(e.cancelable) e.preventDefault();
+                    const touch = e.touches[0];
+                    this.handleInputStart(touch.clientX, touch.clientY);
+                }, {passive: false});
+
+                this.canvas.addEventListener('mousemove', (e) => this.handleInputMove(e.clientX, e.clientY));
+                this.canvas.addEventListener('touchmove', (e) => {
+                    const touch = e.touches[0];
+                    this.handleInputMove(touch.clientX, touch.clientY);
+                }, {passive: false});
+
+                this.canvas.addEventListener('mouseup', (e) => this.handleInputEnd(e.clientX, e.clientY));
+                this.canvas.addEventListener('touchend', (e) => {
+                    if(e.cancelable) e.preventDefault();
+                    const touch = e.changedTouches[0];
+                    this.handleInputEnd(touch.clientX, touch.clientY);
+                }, {passive: false});
+
+                // UI Event Bindings
+                document.getElementById('btn-add-class').addEventListener('click', () => this.addClass());
+                document.getElementById('btn-export').addEventListener('click', () => this.exportData());
+                document.getElementById('btn-import').addEventListener('click', () => this.importData());
+                document.getElementById('file-input').addEventListener('change', (e) => this.handleFileSelect(e));
+
+                document.getElementById('btn-start-app').addEventListener('click', () => this.startApp());
+                document.getElementById('btn-reset-all').addEventListener('click', () => this.openResetAllModal());
+                document.getElementById('class-selector').addEventListener('change', (e) => this.changeClass(e.target.value));
+                document.getElementById('gender-selector').addEventListener('change', (e) => this.changeGenderFilter(e.target.value));
+                
+                // Modal Events (Reset Timer)
+                document.getElementById('btn-modal-next-race').addEventListener('click', () => this.execReset(false));
+                document.getElementById('btn-modal-clear-all').addEventListener('click', () => this.showClearConfirm());
+                document.getElementById('btn-modal-cancel').addEventListener('click', () => this.closeModal());
+                document.getElementById('btn-modal-confirm-clear').addEventListener('click', () => this.execReset(true));
+                document.getElementById('btn-modal-confirm-cancel').addEventListener('click', () => this.closeModal());
+                
+                // Modal Events (Reset All Data)
+                document.getElementById('btn-modal-reset-all-confirm').addEventListener('click', () => this.execResetAllData());
+                document.getElementById('btn-modal-reset-all-cancel').addEventListener('click', () => this.closeModal());
+
+                this.loop = this.loop.bind(this);
+                requestAnimationFrame(this.loop);
+                
+                const saved = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        if (data && data.classes && data.classes.length > 0) {
+                            this.classes = data.classes;
+                            this.updateRegisteredClassesList();
+                            
+                            // 保存されていた設定を復元
+                            if (typeof data.currentClassIdx !== 'undefined') {
+                                this.currentClassIdx = data.currentClassIdx;
+                            } else {
+                                this.currentClassIdx = 0;
+                            }
+                        }
+                    } catch(e) {}
+                }
+            }
+            
+            get currentClass() {
+                if (this.currentClassIdx < 0 || this.currentClassIdx >= this.classes.length) {
+                    return this.classes.length > 0 ? this.classes[0] : null;
+                }
+                return this.classes[this.currentClassIdx];
+            }
+
+            resize() {
+                const rect = this.container.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+                this.width = this.canvas.width;
+                this.height = this.canvas.height;
+                this.offsetX = rect.left;
+                this.offsetY = rect.top;
+            }
+
+            // --- 設定画面 ---
+            addClass() {
+                const nameInput = document.getElementById('reg-class-name');
+                const listInput = document.getElementById('reg-student-list');
+                const className = nameInput.value.trim();
+                const listText = listInput.value.trim();
+
+                if (!className) { alert("クラス名を入力してください"); return; }
+                if (!listText) { alert("名簿を入力してください"); return; }
+
+                const students = listText.split('\n').map((line, idx) => {
+                    let l = line.trim();
+                    if(!l) return null;
+                    
+                    let gender = 'O'; 
+                    
+                    // タブまたはスペースで分割
+                    let parts = l.split(/[\t\s　]+/);
+                    // 空要素削除
+                    parts = parts.filter(p => p);
+
+                    if (parts.length === 0) return null;
+
+                    // 性別判定 (末尾)
+                    const last = parts[parts.length - 1];
+                    if (['男','M','m','boy','Boy','男子'].includes(last)) {
+                        gender = 'M';
+                        parts.pop();
+                    } else if (['女','F','f','girl','Girl','女子'].includes(last)) {
+                        gender = 'F';
+                        parts.pop();
+                    }
+                    
+                    // 出席番号除去 (先頭) - 数字だけ、あるいは数字+記号
+                    if (parts.length > 0 && /^\d+[\.\:．：]?$/.test(parts[0])) {
+                         parts.shift();
+                    }
+
+                    let name = parts.join(' ');
+                    
+                    // 名前が空になってしまった場合の救済
+                    if (!name) {
+                        name = l; 
+                    }
+
+                    return { id: idx + 1, name: name, gender: gender };
+                }).filter(s => s !== null);
+
+                this.classes.push({
+                    name: className,
+                    students: students,
+                    records: [] 
+                });
+
+                nameInput.value = "";
+                listInput.value = "";
+                
+                this.updateRegisteredClassesList();
+                this.saveDataToStorage(); // 追加時も自動保存
+                alert(`「${className}」を追加しました`);
+            }
+            
+            updateRegisteredClassesList() {
+                const div = document.getElementById('registered-classes-list');
+                if (this.classes.length === 0) {
+                    div.innerText = "なし";
+                } else {
+                    div.innerText = this.classes.map(c => c.name).join(', ');
+                }
+            }
+
+            // データエクスポート (JSONファイル保存)
+            exportData() {
+                if (this.classes.length === 0) {
+                    alert("保存するデータがありません");
+                    return;
+                }
+                const data = {
+                    classes: this.classes,
+                    exportDate: new Date().toISOString()
+                };
+                const json = JSON.stringify(data, null, 2);
+                const blob = new Blob([json], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `stopwatch_data_${new Date().toISOString().slice(0,10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // データインポート (トリガー)
+            importData() {
+                document.getElementById('file-input').click();
+            }
+
+            // ファイル選択時処理
+            handleFileSelect(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        if (data && Array.isArray(data.classes)) {
+                            if (confirm("現在のデータに上書きしますか？\n（キャンセルすると追加読み込みになります）")) {
+                                this.classes = data.classes;
+                            } else {
+                                this.classes = this.classes.concat(data.classes);
+                            }
+                            this.currentClassIdx = -1; // リセット
+                            this.updateRegisteredClassesList();
+                            this.saveDataToStorage();
+                            alert("データを読み込みました");
+                        } else {
+                            alert("無効なデータ形式です");
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        alert("読み込みに失敗しました");
+                    }
+                    // inputをリセットして同じファイルを再選択できるようにする
+                    event.target.value = '';
+                };
+                reader.readAsText(file);
+            }
+            
+            saveDataToStorage() {
+                 const data = {
+                    classes: this.classes,
+                    currentClassIdx: this.currentClassIdx
+                };
+                localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify(data));
+            }
+
+            // 全データリセット (モーダルを開く)
+            openResetAllModal() {
+                const modal = document.getElementById('modal-overlay');
+                document.getElementById('modal-title').innerText = "全データ消去";
+                document.getElementById('modal-message').innerText = ""; 
+                
+                document.getElementById('modal-options-default').style.display = 'none';
+                document.getElementById('modal-options-confirm').style.display = 'none';
+                document.getElementById('modal-options-reset-all').style.display = 'flex';
+                
+                modal.style.display = 'flex';
+            }
+            
+            // 全データリセット (実行)
+            execResetAllData() {
+                localStorage.removeItem('pe_stopwatch_canvas_data_v2');
+                this.classes = [];
+                this.currentClassIdx = -1;
+                this.updateRegisteredClassesList();
+                this.closeModal();
+                
+                const msg = document.getElementById('flash-message');
+                msg.innerText = "全データを消去し、初期化しました";
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; }, 2500);
+            }
+
+            // --- 画面遷移 ---
+            startApp() {
+                if (this.classes.length === 0) { alert("クラスを登録してください"); return; }
+                
+                // 初回のみ初期化（すでに選択済みの場合は維持）
+                if (this.currentClassIdx < 0) {
+                    this.currentClassIdx = 0;
+                    this.currentAttempt = 1;
+                    this.filterGender = 'ALL';
+                    this.sessionRecords = [];
+                    this.resetTimer(false);
+                    
+                    // UI初期化
+                    document.getElementById('gender-selector').value = 'ALL';
+                    document.getElementById('attempt1').checked = true;
+                }
+                
+                this.updateClassSelector();
+                
+                // 設定値をUIに反映（戻ってきたとき用）
+                document.getElementById('gender-selector').value = this.filterGender;
+                document.getElementById('attempt' + this.currentAttempt).checked = true;
+
+                this.state = 'RECORD';
+                document.getElementById('setup-panel').style.display = 'none';
+                document.getElementById('header-controls').style.display = 'block';
+                
+                // HTMLリスト表示
+                const listContainer = document.getElementById('record-list-container');
+                listContainer.style.display = 'flex';
+                listContainer.style.top = '360px';
+                listContainer.style.bottom = '85px';
+                listContainer.classList.remove('compact-mode'); // 通常モード
+                
+                this.renderRecordList(false); // ★修正：自動スクロール無効化（1位を固定）
+            }
+
+            loadDataAndGoView() {
+                const json = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                if(json) {
+                    try {
+                        const data = JSON.parse(json);
+                        this.classes = data.classes || [];
+                        if (typeof data.currentClassIdx !== 'undefined') {
+                            this.currentClassIdx = data.currentClassIdx;
+                        } else {
+                            this.currentClassIdx = 0;
+                        }
+                    } catch(e) { console.error(e); }
+                }
+                if(this.classes.length === 0) { alert("データがありません"); return; }
+                this.updateClassSelector();
+                this.state = 'VIEW';
+                document.getElementById('setup-panel').style.display = 'none';
+                document.getElementById('header-controls').style.display = 'none'; 
+                
+                // VIEW用のリスト表示設定
+                const listContainer = document.getElementById('record-list-container');
+                listContainer.style.display = 'flex';
+                listContainer.style.top = '120px';
+                listContainer.style.bottom = '90px'; 
+                listContainer.classList.add('compact-mode'); // コンパクトモード
+                
+                this.sortMode = 'ID'; 
+                this.renderViewList();
+            }
+
+            backToRecord() {
+                this.state = 'RECORD';
+                document.getElementById('setup-panel').style.display = 'none';
+                document.getElementById('header-controls').style.display = 'block';
+                
+                const listContainer = document.getElementById('record-list-container');
+                listContainer.style.display = 'flex';
+                listContainer.style.top = '360px';
+                listContainer.style.bottom = '85px';
+                listContainer.classList.remove('compact-mode');
+                
+                this.sessionRecords = [];
+                this.resetTimer(false); 
+                this.renderRecordList(false);
+            }
+
+            goHome() {
+                this.state = 'HOME';
+                this.isRunning = false;
+                document.getElementById('setup-panel').style.display = 'flex';
+                document.getElementById('header-controls').style.display = 'none';
+                document.getElementById('record-list-container').style.display = 'none';
+                this.updateRegisteredClassesList();
+            }
+            
+            updateClassSelector() {
+                const sel = document.getElementById('class-selector');
+                sel.innerHTML = "";
+                this.classes.forEach((c, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = idx;
+                    opt.innerText = c.name;
+                    if(idx === this.currentClassIdx) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+            }
+            
+            changeClass(indexStr) {
+                const idx = parseInt(indexStr);
+                this.currentClassIdx = idx;
+                this.sessionRecords = [];
+                this.resetTimer(false); 
+                if (this.state === 'RECORD') {
+                    this.renderRecordList(true);
+                }
+            }
+
+            changeGenderFilter(val) {
+                this.filterGender = val;
+                if (this.state === 'RECORD') {
+                    this.renderRecordList(false);
+                } else if (this.state === 'VIEW') {
+                    this.renderViewList();
+                }
+            }
+
+            changeAttempt(val) {
+                this.currentAttempt = parseInt(val);
+                document.getElementById('attempt' + val).checked = true;
+                if (this.state === 'RECORD') {
+                    this.renderRecordList(false);
+                }
+            }
+
+            // --- タイマー & 記録 ---
+            toggleTimer() {
+                if (this.isRunning) {
+                    this.isRunning = false;
+                } else {
+                    this.startTime = Date.now() - this.elapsedTime;
+                    this.isRunning = true;
+                }
+            }
+
+            resetTimer(forceClearAll = false) {
+                this.isRunning = false;
+                this.elapsedTime = 0;
+                
+                if (forceClearAll) {
+                    if (this.currentClass) {
+                        this.currentClass.records = []; 
+                    }
+                    this.sessionRecords = [];
+                } else {
+                    if (this.currentClass && this.sessionRecords.length > 0) {
+                        this.currentClass.records = this.currentClass.records.concat(this.sessionRecords);
+                    }
+                    this.sessionRecords = [];
+                }
+
+                if(this.state === 'RECORD') {
+                    this.renderRecordList(false); // ★修正：自動スクロール無効化
+                }
+                
+                this.saveDataToStorage();
+            }
+
+            openResetModal() {
+                if (this.sessionRecords.length === 0) {
+                    this.execReset(false);
+                    return;
+                }
+                const modal = document.getElementById('modal-overlay');
+                document.getElementById('modal-title').innerText = "リセット操作";
+                document.getElementById('modal-message').innerText = "操作を選択してください。";
+                
+                document.getElementById('modal-options-default').style.display = 'flex';
+                document.getElementById('modal-options-confirm').style.display = 'none';
+                document.getElementById('modal-options-reset-all').style.display = 'none';
+                modal.style.display = 'flex';
+            }
+
+            showClearConfirm() {
+                document.getElementById('modal-options-default').style.display = 'none';
+                document.getElementById('modal-options-confirm').style.display = 'flex';
+            }
+
+            closeModal() {
+                document.getElementById('modal-overlay').style.display = 'none';
+            }
+
+            execReset(forceClear) {
+                this.resetTimer(forceClear);
+                this.closeModal();
+                const msg = document.getElementById('flash-message');
+                msg.innerText = forceClear ? "全データを消去しました" : "記録を保存し、リセットしました";
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; }, 2000);
+            }
+
+            recordLap() {
+                const currentMs = this.isRunning ? (Date.now() - this.startTime) : this.elapsedTime;
+                if (currentMs === 0) return;
+
+                const newRecord = {
+                    rank: this.sessionRecords.length + 1,
+                    attempt: this.currentAttempt, // 1 or 2
+                    studentId: 9999,
+                    studentName: "(未選択)",
+                    timeMs: currentMs,
+                    timeStr: this.formatTime(currentMs)
+                };
+
+                this.sessionRecords.push(newRecord);
+                this.renderRecordList(false); // ★修正：自動スクロール無効化
+            }
+            
+            // 計測画面用：プルダウン付きリスト
+            renderRecordList(autoScroll = false) {
+                const container = document.getElementById('record-list-container');
+                if (!container) return; 
+                const prevScrollTop = container.scrollTop;
+                container.innerHTML = "";
+                
+                const sessionUsedIds = new Set(
+                    this.sessionRecords
+                        .map(r => parseInt(r.studentId))
+                        .filter(id => id !== 9999)
+                );
+
+                const pastAttemptUsedIds = new Set(
+                    this.currentClass.records
+                        .filter(r => r.attempt === this.currentAttempt)
+                        .map(r => parseInt(r.studentId))
+                        .filter(id => id !== 9999)
+                );
+
+                const disabledIds = new Set([...sessionUsedIds, ...pastAttemptUsedIds]);
+
+                this.sessionRecords.forEach((rec, idx) => {
+                    this.addRecordRowToDOM(rec, idx, disabledIds);
+                });
+                
+                if (autoScroll) {
+                    container.scrollTop = container.scrollHeight;
+                } else {
+                    container.scrollTop = prevScrollTop;
+                }
+            }
+
+            addRecordRowToDOM(record, index, disabledIds) {
+                const container = document.getElementById('record-list-container');
+                const div = document.createElement('div');
+                div.className = 'record-row';
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'record-info';
+                const attemptLabel = record.attempt === 1 ? "①" : "②";
+                infoDiv.innerHTML = `
+                    <span class="record-rank">${attemptLabel} ${record.rank}位</span>
+                    <span class="record-time">${record.timeStr}</span>
+                `;
+                
+                const select = document.createElement('select');
+                select.className = 'record-select';
+                
+                const defOpt = document.createElement('option');
+                defOpt.value = 9999;
+                defOpt.text = "(選択)";
+                if (record.studentId == 9999) defOpt.selected = true;
+                select.appendChild(defOpt);
+
+                this.currentClass.students.forEach(s => {
+                    if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) {
+                        if (s.id !== parseInt(record.studentId)) return;
+                    }
+                    if (disabledIds.has(s.id) && s.id !== parseInt(record.studentId)) {
+                        return;
+                    }
+
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    const genderMark = s.gender === 'M' ? '(男)' : (s.gender === 'F' ? '(女)' : '');
+                    opt.text = `${s.id}. ${s.name} ${genderMark}`;
+                    if (s.id === record.studentId) opt.selected = true;
+                    select.appendChild(opt);
+                });
+
+                select.onchange = (e) => {
+                    const newId = parseInt(e.target.value);
+                    let studentName = "(未選択)";
+                    if(newId !== 9999) {
+                        const s = this.currentClass.students.find(stu => stu.id === newId);
+                        if(s) studentName = s.name;
+                    }
+                    
+                    this.sessionRecords[index].studentId = newId;
+                    this.sessionRecords[index].studentName = studentName;
+                    this.renderRecordList(false);
+                };
+
+                div.appendChild(infoDiv);
+                div.appendChild(select);
+                container.appendChild(div);
+            }
+
+            // 閲覧画面用：テキストのみリスト (コンパクト)
+            renderViewList() {
+                const container = document.getElementById('record-list-container');
+                container.innerHTML = "";
+                
+                let sortedRecords = [...this.currentClass.records];
+                
+                if (this.sortMode === 'TIME') {
+                    sortedRecords.sort((a,b) => a.timeMs - b.timeMs);
+                } else {
+                    sortedRecords.sort((a,b) => a.studentId - b.studentId);
+                }
+
+                if (this.filterGender !== 'ALL') {
+                    sortedRecords = sortedRecords.filter(r => {
+                        if (r.studentId === 9999) return true;
+                        const s = this.currentClass.students.find(stu => stu.id === r.studentId);
+                        return s && s.gender === this.filterGender;
+                    });
+                }
+
+                if (sortedRecords.length === 0) {
+                    container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">データがありません</div>';
+                    return;
+                }
+
+                sortedRecords.forEach((r, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'record-row';
+                    
+                    let rankText = "";
+                    let attemptMark = r.attempt === 1 ? "①" : "②";
+                    
+                    if (this.sortMode === 'TIME') {
+                        rankText = `${i + 1}位 ${attemptMark}`;
+                    } else {
+                        rankText = attemptMark;
+                    }
+
+                    let dispName = r.studentName;
+                    if (r.studentId !== 9999) {
+                        dispName = `${r.studentId}. ${r.studentName}`;
+                    }
+
+                    div.innerHTML = `
+                        <div style="display:flex; align-items:center; width:100%;">
+                            <div style="font-weight:bold; color:#888; width:60px; flex-shrink:0;">${rankText}</div>
+                            <div style="flex-grow:1; text-align:left; font-size:16px;">${dispName}</div>
+                            <div class="record-time">${r.timeStr}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            saveAndGoView() {
+                if (this.sessionRecords.length > 0) {
+                    this.currentClass.records = this.currentClass.records.concat(this.sessionRecords);
+                    this.sessionRecords = [];
+                }
+                const data = {
+                    classes: this.classes,
+                    currentClassIdx: this.currentClassIdx
+                };
+                localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify(data));
+                this.loadDataAndGoView();
+            }
+
+            formatTime(ms) {
+                let date = new Date(ms);
+                let m = String(date.getUTCMinutes()).padStart(2, '0');
+                let s = String(date.getUTCSeconds()).padStart(2, '0');
+                let mil = String(Math.floor(date.getUTCMilliseconds() / 10)).padStart(2, '0');
+                return `${m}:${s}.${mil}`;
+            }
+
+            copyToClipboard() {
+                let text = `【${this.currentClass.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`;
+                let studentsSorted = [...this.currentClass.students].sort((a,b) => a.id - b.id);
+                let allRecs = this.currentClass.records.concat(this.sessionRecords);
+
+                studentsSorted.forEach(s => {
+                    const rec1 = [...allRecs].reverse().find(r => r.studentId === s.id && r.attempt === 1);
+                    const rec2 = [...allRecs].reverse().find(r => r.studentId === s.id && r.attempt === 2);
+                    
+                    const time1 = rec1 ? rec1.timeStr : "";
+                    const time2 = rec2 ? rec2.timeStr : "";
+                    const genderStr = s.gender === 'M' ? '男' : (s.gender === 'F' ? '女' : '');
+                    
+                    text += `${s.id}\t${s.name}\t${genderStr}\t${time1}\t${time2}\n`;
+                });
+
+                const ta = document.getElementById('clipboard-target');
+                ta.value = text;
+                ta.select();
+                document.execCommand('copy');
+                alert(`「${this.currentClass.name}」の記録をコピーしました！(番号順/2回分)`);
+            }
+
+            // Input Handling (Common)
+            getRelativePos(clientX, clientY) {
+                const rect = this.container.getBoundingClientRect();
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            }
+            handleInputStart(rawX, rawY) {
+                const {x, y} = this.getRelativePos(rawX, rawY);
+                if (this.state === 'VIEW') {
+                    this.isDragging = true; this.lastTouchY = y;
+                }
+                this.activeButton = null;
+                for (let btn of this.buttons) {
+                    if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                        this.activeButton = btn; return;
+                    }
+                }
+            }
+            handleInputMove(rawX, rawY) {
+                const {x, y} = this.getRelativePos(rawX, rawY);
+                if (this.activeButton) {
+                    const btn = this.activeButton;
+                    if (!(x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h)) {
+                        this.activeButton = null;
+                    }
+                }
+                if (this.state === 'VIEW' && this.isDragging) {
+                    const deltaY = y - this.lastTouchY;
+                    this.scrollY += deltaY;
+                    if (this.scrollY > 0) this.scrollY = 0;
+                    this.lastTouchY = y;
+                }
+            }
+            handleInputEnd(rawX, rawY) {
+                if (this.activeButton) {
+                    const {x, y} = this.getRelativePos(rawX, rawY);
+                    const btn = this.activeButton;
+                    if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                        if(btn.onClick) btn.onClick();
+                    }
+                    this.activeButton = null;
+                }
+            }
+
+            loop() {
+                if (this.isRunning) { this.elapsedTime = Date.now() - this.startTime; }
+                this.ctx.fillStyle = "#f2f2f7"; this.ctx.fillRect(0, 0, this.width, this.height);
+                this.buttons = [];
+                if (this.state === 'HOME') {
+                    // 背景のタイトル描画はHTML側に移したので削除
+                } else if (this.state === 'RECORD') {
+                    this.drawRecordScreen();
+                } else if (this.state === 'VIEW') {
+                    this.drawViewScreen();
+                }
+                requestAnimationFrame(this.loop);
+            }
+
+            drawRecordScreen() {
+                const cx = this.width / 2;
+                const topOffset = 130; 
+
+                this.ctx.fillStyle = "#fff";
+                this.ctx.roundRect(20, topOffset, this.width - 40, 75, 15);
+                this.ctx.fill();
+                
+                this.ctx.fillStyle = "#333";
+                this.ctx.font = "bold 45px monospace";
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(this.formatTime(this.elapsedTime), cx, topOffset + 37);
+
+                const btnY = topOffset + 85;
+                const btnW = (this.width - 60) / 2;
+                const btnH = 55;
+                
+                this.drawButton(20, btnY, btnW, btnH, 
+                    this.isRunning ? "ストップ" : "スタート", 
+                    this.isRunning ? "#FF3B30" : "#34C759", 
+                    () => this.toggleTimer()
+                );
+
+                this.drawButton(20 + btnW + 20, btnY, btnW, btnH, "リセット", "#8E8E93", () => {
+                   this.openResetModal();
+                });
+
+                const recBtnY = btnY + 65;
+                const recBtnH = 65;
+                this.drawButton(40, recBtnY, this.width - 80, recBtnH, "● 記録する", "#007AFF", () => this.recordLap());
+
+                const footerH = 70;
+                const footerY = this.height - footerH;
+                
+                this.ctx.fillStyle = "#f2f2f7";
+                this.ctx.fillRect(0, footerY - 10, this.width, footerH + 10);
+                
+                this.drawButton(20, footerY, this.width - 40, 50, "保存して確認", "#5856D6", () => this.saveAndGoView());
+            }
+
+            drawViewScreen() {
+                const cx = this.width / 2;
+                const topOffset = 40; 
+
+                this.ctx.fillStyle = "#333";
+                this.ctx.font = "bold 20px sans-serif";
+                this.ctx.textAlign = "center";
+                this.ctx.fillText("記録一覧 (全履歴)", cx, topOffset + 20);
+
+                const btnW = (this.width - 60) / 2;
+                const btnY = topOffset + 35; 
+                
+                this.drawButton(20, btnY, btnW, 30, "タイム順", this.sortMode === 'TIME' ? "#007AFF" : "#ccc", () => { 
+                    this.sortMode = 'TIME'; this.renderViewList(); 
+                });
+                this.drawButton(20 + btnW + 20, btnY, btnW, 30, "出席番号順", this.sortMode === 'ID' ? "#007AFF" : "#ccc", () => { 
+                    this.sortMode = 'ID'; this.renderViewList(); 
+                });
+
+                // フッター背景
+                const footerH = 80;
+                this.ctx.fillStyle = "#f2f2f7";
+                this.ctx.fillRect(0, this.height - footerH, this.width, footerH);
+
+                const marginX = 10;
+                const gap = 10;
+                const btnCount = 3;
+                const btnH = 50;
+                const fBtnW = (this.width - (marginX * 2) - (gap * (btnCount - 1))) / btnCount;
+                const fBtnY = this.height - marginX - btnH;
+
+                this.drawButton(marginX, fBtnY, fBtnW, btnH, "計測へ", "#007AFF", () => this.backToRecord());
+                this.drawButton(marginX + fBtnW + gap, fBtnY, fBtnW, btnH, "コピー", "#34C759", () => this.copyToClipboard());
+                this.drawButton(marginX + (fBtnW + gap) * 2, fBtnY, fBtnW, btnH, "トップ", "#8E8E93", () => this.goHome());
+            }
+
+            drawButton(x, y, w, h, text, color, onClick) {
+                let fillColor = color;
+                if (this.activeButton && this.activeButton.x === x && this.activeButton.y === y) {
+                    this.ctx.globalAlpha = 0.7;
+                }
+                this.ctx.fillStyle = "rgba(0,0,0,0.1)";
+                this.ctx.roundRect(x, y+2, w, h, 10);
+                this.ctx.fill();
+                this.ctx.fillStyle = fillColor;
+                this.ctx.beginPath();
+                this.ctx.roundRect(x, y, w, h, 10);
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+                
+                const fontSize = h < 40 ? 14 : 18;
+                this.ctx.fillStyle = "#fff";
+                this.ctx.font = `bold ${fontSize}px sans-serif`;
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(text, x + w/2, y + h/2);
+                this.buttons.push({x, y, w, h, onClick});
+            }
+        }
+
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+                this.beginPath(); this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r);
+                this.closePath(); return this;
+            }
+        }
+
+        const app = new App();
+    </script>
+</body>
+</html>
