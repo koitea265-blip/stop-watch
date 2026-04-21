@@ -361,8 +361,8 @@
             }
 
             changeClass(idx) { this.currentClassIdx = parseInt(idx); this.elapsedTime = 0; this.sessionRecords = []; this.startApp(); }
-            changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(); }
-            changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(); }
+            changeGenderFilter(val) { this.filterGender = val; this.renderRecordList(); }
+            changeAttempt(val) { this.currentAttempt = parseInt(val); this.renderRecordList(); }
 
             toggleTimer() {
                 if (this.isRunning) { this.isRunning = false; }
@@ -382,12 +382,10 @@
                 this.renderRecordList();
             }
 
-            // ★ 修正：DOM再構築を最小限にする方式
             renderRecordList() {
                 const container = document.getElementById('record-list-container');
                 if (!container || this.state !== 'RECORD') return;
 
-                // データ数に合わせて行を調整
                 while (container.children.length > this.sessionRecords.length) container.removeChild(container.lastChild);
                 
                 this.sessionRecords.forEach((rec, i) => {
@@ -396,56 +394,45 @@
                         div = document.createElement('div'); div.className = 'record-row';
                         div.innerHTML = `<div class="record-info"><span class="record-rank"></span><span class="record-time"></span></div><select class="record-select"></select>`;
                         container.appendChild(div);
-                        // 初回生成時のみ全選択肢を作成
-                        this.buildOptions(div.querySelector('.record-select'));
                     }
                     div.querySelector('.record-rank').innerText = `${rec.attempt===1?'①':'②'} ${rec.rank}位`;
                     div.querySelector('.record-time').innerText = rec.timeStr;
                     
                     const select = div.querySelector('.record-select');
-                    select.value = rec.studentId;
+                    // ★ 修正：現在のフィルタ状況に合わせて、プルダウンの中身自体を再構成する
+                    this.rebuildSelectOptions(select, rec.studentId);
+                    
                     select.onchange = e => {
                         this.sessionRecords[i].studentId = parseInt(e.target.value);
-                        this.updateSelectStates(); // 全体のdisabled状態だけ更新
+                        this.renderRecordList(); // 全体の重複チェック反映のため再描画
                     };
                 });
-                this.updateSelectStates();
                 container.scrollTop = container.scrollHeight;
             }
 
-            // 初回一度だけ全生徒の選択肢を作る（負荷軽減）
-            buildOptions(select) {
-                const c = this.classes[this.currentClassIdx];
-                let h = `<option value="9999">選択</option>`;
-                c.students.forEach(s => {
-                    h += `<option value="${s.id}">${s.id}. ${s.name}</option>`;
-                });
-                select.innerHTML = h;
-            }
-
-            // ★ 修正：全プルダウンのdisabled状態だけを高速に切り替える（クラッシュ対策）
-            updateSelectStates() {
+            // ★ 修正：計測済みの名前を選択肢から排除する
+            rebuildSelectOptions(select, currentSelectedId) {
                 const c = this.classes[this.currentClassIdx];
                 const pastIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => r.studentId));
                 const currentIds = new Set(this.sessionRecords.map(r => r.studentId).filter(id => id !== 9999));
                 
-                const selects = document.querySelectorAll('.record-select');
-                selects.forEach((select, sessionIdx) => {
-                    const myId = parseInt(select.value);
-                    Array.from(select.options).forEach(opt => {
-                        const optId = parseInt(opt.value);
-                        if (optId === 9999) return;
-                        
-                        const student = c.students.find(s => s.id === optId);
-                        const genderMatch = this.filterGender === 'ALL' || student.gender === this.filterGender;
-                        const isUsedElsewhere = (pastIds.has(optId) || currentIds.has(optId)) && optId !== myId;
-                        
-                        opt.disabled = !genderMatch || isUsedElsewhere;
-                        opt.style.color = opt.disabled ? '#ccc' : '#000';
-                        // フィルタ外の生徒は表示自体を隠す（iOS対策）
-                        opt.style.display = genderMatch ? 'block' : 'none';
-                    });
+                let h = `<option value="9999" ${currentSelectedId === 9999 ? 'selected' : ''}>選択</option>`;
+                
+                c.students.forEach(s => {
+                    // 性別フィルタに合致するか
+                    const genderMatch = this.filterGender === 'ALL' || s.gender === this.filterGender;
+                    if (!genderMatch) return;
+
+                    // すでに計測済み（保存済み or 現在のセッションで選択済み）か
+                    const isMeasured = pastIds.has(s.id) || currentIds.has(s.id);
+                    
+                    // 「計測済み」でも「現在この行で選択されている本人」なら表示する（そうしないと表示が消えてしまう）
+                    if (isMeasured && s.id !== currentSelectedId) return;
+
+                    h += `<option value="${s.id}" ${s.id === currentSelectedId ? 'selected' : ''}>${s.id}. ${s.name}</option>`;
                 });
+                
+                if (select.innerHTML !== h) select.innerHTML = h;
             }
 
             execReset(clear) {
