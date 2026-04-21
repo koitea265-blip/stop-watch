@@ -189,15 +189,24 @@
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
                 
-                // 保存処理の負荷軽減用タイマー
                 this.saveTimer = null;
+                this.isRecovering = false; // リカバリ中フラグ
 
                 this.resetInternalState();
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 this.bindEvents();
+                
+                // OSによる終了後の復帰対策
                 this.initStorage();
                 this.clearInputFields();
+
+                // バックグラウンドに回った瞬間に保存（オフライン時のリロード対策）
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        this.saveDataToStorage(true);
+                    }
+                });
 
                 this.loop = this.loop.bind(this);
                 requestAnimationFrame(this.loop);
@@ -218,23 +227,41 @@
                 this.sortMode = 'TIME';
             }
 
+            // ストレージ読み込み＆リカバリ（UI状態の復元）
             initStorage() {
                 try {
                     const saved = localStorage.getItem(this.STORAGE_KEY);
                     if (saved) {
                         const data = JSON.parse(saved);
-                        if (data && Array.isArray(data.classes) && data.classes.length > 0) {
+                        if (data && Array.isArray(data.classes)) {
                             this.classes = data.classes;
                             this.classes.forEach(c => {
                                 if (!c.records) c.records = [];
                                 if (!c.students) c.students = [];
                             });
+
+                            // ★ オフライン復帰用の状態復元
+                            if (data.uiState) {
+                                this.isRecovering = true;
+                                this.currentClassIdx = data.uiState.currentClassIdx;
+                                this.currentAttempt = data.uiState.currentAttempt;
+                                this.filterGender = data.uiState.filterGender;
+                                this.sessionRecords = data.uiState.sessionRecords || [];
+                                
+                                // 前回の画面に戻る
+                                if (data.uiState.state === 'RECORD' && this.classes[this.currentClassIdx]) {
+                                    this.startApp(true); // リカバリモードで起動
+                                } else if (data.uiState.state === 'VIEW') {
+                                    this.loadDataAndGoView();
+                                }
+                                this.isRecovering = false;
+                            }
                         }
                     }
                 } catch(e) {
                     console.error("Storage load failed", e);
                 }
-                this.currentClassIdx = -1;
+                if (!this.isRecovering) this.currentClassIdx = -1;
                 this.updateRegisteredClassesList();
             }
 
@@ -321,7 +348,7 @@
                 this.classes.push({ name: className, students: students, records: [] });
                 this.clearInputFields();
                 this.updateRegisteredClassesList(); 
-                this.saveDataToStorage(); 
+                this.saveDataToStorage(true); 
                 alert(`「${className}」を追加しました`);
             }
             
@@ -330,6 +357,7 @@
                 div.innerText = (this.classes && this.classes.length > 0) ? this.classes.map(c => c.name).join(', ') : "なし";
             }
 
+            // 保存処理の徹底強化（UI状態も含む）
             saveDataToStorage(immediate = false) {
                  if (this.saveTimer) clearTimeout(this.saveTimer);
                  
@@ -338,29 +366,37 @@
                          if (this.classes.length === 0) {
                              localStorage.removeItem(this.STORAGE_KEY);
                          } else {
-                             localStorage.setItem(this.STORAGE_KEY, JSON.stringify({ classes: this.classes }));
+                             const dataToSave = {
+                                 classes: this.classes,
+                                 uiState: {
+                                     state: this.state,
+                                     currentClassIdx: this.currentClassIdx,
+                                     currentAttempt: this.currentAttempt,
+                                     filterGender: this.filterGender,
+                                     sessionRecords: this.sessionRecords
+                                 }
+                             };
+                             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dataToSave));
                          }
                      } catch(e) {
-                         console.warn("Storage write blocked or full", e);
+                         console.warn("Storage write failed", e);
                      }
                  };
 
-                 if (immediate) {
-                     executeSave();
-                 } else {
-                     this.saveTimer = setTimeout(executeSave, 1000); 
-                 }
+                 if (immediate) executeSave();
+                 else this.saveTimer = setTimeout(executeSave, 1000); 
             }
 
-            // ★ 修正: 計測画面に入る際の状態を初期化（タイムを強制的に0にする）
-            startApp() {
+            startApp(isRecovery = false) {
                 if (this.classes.length === 0) { alert("クラスを登録してください。"); return; }
                 if (this.currentClassIdx < 0) this.currentClassIdx = 0;
 
-                // タイムと動作状態、セッションをリセット
-                this.isRunning = false;
-                this.elapsedTime = 0;
-                this.sessionRecords = [];
+                // リカバリでない場合のみタイムをリセット
+                if (!isRecovery) {
+                    this.isRunning = false;
+                    this.elapsedTime = 0;
+                    this.sessionRecords = [];
+                }
 
                 this.updateClassSelector();
                 document.getElementById('gender-selector').value = this.filterGender;
@@ -370,8 +406,10 @@
                 document.getElementById('header-controls').style.display = 'block';
                 const listContainer = document.getElementById('record-list-container');
                 listContainer.style.display = 'flex'; listContainer.style.top = '360px'; listContainer.style.bottom = '85px';
-                listContainer.classList.remove('compact-mode'); listContainer.innerHTML = ""; 
+                listContainer.classList.remove('compact-mode'); 
+                listContainer.innerHTML = ""; 
                 this.renderRecordList(false); 
+                this.saveDataToStorage(); // 状態変化を保存
             }
 
             updateClassSelector() {
@@ -384,13 +422,20 @@
                 });
             }
 
-            changeClass(idx) { this.currentClassIdx = parseInt(idx); this.sessionRecords = []; this.resetTimer(false); this.startApp(); }
-            changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); }
-            changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); }
+            changeClass(idx) { 
+                this.currentClassIdx = parseInt(idx); 
+                this.isRunning = false;
+                this.elapsedTime = 0;
+                this.sessionRecords = []; 
+                this.startApp(); 
+            }
+            changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); this.saveDataToStorage(); }
+            changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); this.saveDataToStorage(); }
 
             toggleTimer() {
                 if (this.isRunning) { this.isRunning = false; } 
                 else { if (this.isAllMeasured()) return; this.startTime = Date.now() - this.elapsedTime; this.isRunning = true; }
+                this.saveDataToStorage();
             }
 
             resetTimer(forceClearAll = false) {
@@ -416,23 +461,17 @@
             }
 
             execResetAllData() { 
-                try { 
-                    localStorage.removeItem(this.STORAGE_KEY);
-                } catch(e) {} 
-                
+                try { localStorage.removeItem(this.STORAGE_KEY); } catch(e) {} 
                 this.resetInternalState();
                 this.clearInputFields();
-                
                 const regList = document.getElementById('registered-classes-list');
                 if (regList) regList.innerText = "なし";
                 const classSelector = document.getElementById('class-selector');
                 if (classSelector) classSelector.innerHTML = "";
                 const recContainer = document.getElementById('record-list-container');
                 if (recContainer) recContainer.innerHTML = "";
-                
                 this.goHome();
                 this.closeModal(); 
-                
                 const msg = document.getElementById('flash-message');
                 msg.innerText = "すべてのデータを消去しました";
                 msg.style.display = 'block';
@@ -447,6 +486,7 @@
                 document.getElementById('setup-panel').style.display = 'flex'; 
                 document.getElementById('header-controls').style.display = 'none'; 
                 document.getElementById('record-list-container').style.display = 'none'; 
+                this.saveDataToStorage(true);
             }
 
             recordLap() {
@@ -454,6 +494,7 @@
                 if (currentMs === 0) return;
                 this.sessionRecords.push({ rank: this.sessionRecords.length + 1, attempt: this.currentAttempt, studentId: 9999, studentName: "(未選択)", timeMs: currentMs, timeStr: this.formatTime(currentMs) });
                 this.renderRecordList(false);
+                this.saveDataToStorage(); // ラップごとに保存
             }
             
             renderRecordList(autoScroll = false) {
@@ -521,6 +562,7 @@
                 listContainer.classList.add('compact-mode'); 
                 this.sortMode = 'ID'; 
                 this.renderViewList(); 
+                this.saveDataToStorage(true);
             }
             
             renderViewList() { 
