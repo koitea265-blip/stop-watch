@@ -168,7 +168,7 @@
     <script>
         class App {
             constructor() {
-                this.STORAGE_KEY = 'pe_stopwatch_pro_v3'; // キーを刷新してクリーン開始
+                this.STORAGE_KEY = 'pe_stopwatch_pro_v3';
                 this.container = document.getElementById('app-container');
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
@@ -180,14 +180,11 @@
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 this.bindEvents();
-                
-                // データ復元
                 this.initStorage();
-                
-                // ライフサイクル管理：バックグラウンド時のデータ保護
+
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') {
-                        this.saveDataToStorage(); // 強制即時保存
+                        this.saveDataToStorage();
                     } else {
                         if (this.isRunning) this.requestWakeLock();
                     }
@@ -216,9 +213,6 @@
                 if ('wakeLock' in navigator) {
                     try {
                         this.wakeLock = await navigator.wakeLock.request('screen');
-                        this.wakeLock.addEventListener('release', () => {
-                            if (this.isRunning && document.visibilityState === 'visible') this.requestWakeLock();
-                        });
                     } catch (err) {}
                 }
             }
@@ -230,7 +224,6 @@
                         const data = JSON.parse(saved);
                         if (data && Array.isArray(data.classes)) {
                             this.classes = data.classes;
-                            // 復帰：最後に計測していた状態に戻す
                             if (data.uiState) {
                                 this.state = data.uiState.state || 'HOME';
                                 this.currentClassIdx = data.uiState.currentClassIdx;
@@ -265,20 +258,25 @@
                         }
                     };
                     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
-                    this.needsSave = false;
-                } catch(e) { console.warn("Save failed - Storage full?"); }
+                } catch(e) {}
             }
 
             bindEvents() {
                 const c = this.canvas;
-                const start = (ex, ey) => {
+                const getPos = (ex, ey) => {
                     const rect = this.container.getBoundingClientRect();
-                    this.handleInputStart(ex - rect.left, ey - rect.top);
+                    return { x: ex - rect.left, y: ey - rect.top };
                 };
-                c.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+                c.addEventListener('mousedown', e => {
+                    const pos = getPos(e.clientX, e.clientY);
+                    this.handleInputStart(pos.x, pos.y);
+                });
                 c.addEventListener('touchstart', e => {
                     if(e.cancelable) e.preventDefault();
-                    if(e.touches[0]) start(e.touches[0].clientX, e.touches[0].clientY);
+                    if(e.touches[0]) {
+                        const pos = getPos(e.touches[0].clientX, e.touches[0].clientY);
+                        this.handleInputStart(pos.x, pos.y);
+                    }
                 }, {passive: false});
                 c.addEventListener('mouseup', () => this.handleInputEnd());
                 c.addEventListener('touchend', () => this.handleInputEnd());
@@ -303,8 +301,10 @@
 
             resize() {
                 const rect = this.container.getBoundingClientRect();
-                this.canvas.width = rect.width; this.canvas.height = rect.height;
-                this.width = rect.width; this.height = rect.height;
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+                this.width = rect.width;
+                this.height = rect.height;
             }
 
             addClass() {
@@ -314,12 +314,12 @@
                 const students = list.split('\n').map((l, i) => {
                     let parts = l.trim().split(/[\s　]+/);
                     if (parts.length < 1) return null;
-                    let gender = 'O', n = parts.join(' ');
+                    let gender = 'O';
                     const last = parts[parts.length-1];
                     if (['男','M','男子'].includes(last)) { gender='M'; parts.pop(); }
                     else if (['女','F','女子'].includes(last)) { gender='F'; parts.pop(); }
                     if (parts.length > 0 && /^\d+/.test(parts[0])) parts.shift();
-                    n = parts.join(' ') || l;
+                    let n = parts.join(' ') || l;
                     return { id: i+1, name: n, gender };
                 }).filter(s => s);
                 this.classes.push({ name, students, records: [] });
@@ -334,9 +334,13 @@
             }
 
             startApp(isRecovery = false) {
-                if (!this.classes.length) return;
+                if (!this.classes.length) { alert("クラスを登録してください"); return; }
                 if (this.currentClassIdx < 0) this.currentClassIdx = 0;
-                if (!isRecovery) { this.isRunning = false; this.elapsedTime = 0; this.sessionRecords = []; }
+                if (!isRecovery) { 
+                    this.isRunning = false; 
+                    this.elapsedTime = 0; 
+                    this.sessionRecords = []; 
+                }
                 this.state = 'RECORD';
                 this.updateClassSelector();
                 document.getElementById('setup-panel').style.display = 'none';
@@ -365,7 +369,7 @@
                 else {
                     const targets = this.classes[this.currentClassIdx].students.filter(s => this.filterGender === 'ALL' || s.gender === this.filterGender);
                     const doneIds = new Set(this.classes[this.currentClassIdx].records.filter(r => r.attempt === this.currentAttempt).map(r => r.studentId));
-                    if (targets.every(s => doneIds.has(s.id))) return;
+                    if (targets.length > 0 && targets.every(s => doneIds.has(s.id))) return;
                     this.startTime = Date.now() - this.elapsedTime; this.isRunning = true;
                     this.requestWakeLock();
                 }
@@ -378,46 +382,76 @@
                 this.renderRecordList();
             }
 
+            // ★ 修正：DOM再構築を最小限にする方式
             renderRecordList() {
                 const container = document.getElementById('record-list-container');
                 if (!container || this.state !== 'RECORD') return;
+
+                // データ数に合わせて行を調整
                 while (container.children.length > this.sessionRecords.length) container.removeChild(container.lastChild);
+                
                 this.sessionRecords.forEach((rec, i) => {
                     let div = container.children[i];
                     if (!div) {
                         div = document.createElement('div'); div.className = 'record-row';
                         div.innerHTML = `<div class="record-info"><span class="record-rank"></span><span class="record-time"></span></div><select class="record-select"></select>`;
                         container.appendChild(div);
+                        // 初回生成時のみ全選択肢を作成
+                        this.buildOptions(div.querySelector('.record-select'));
                     }
                     div.querySelector('.record-rank').innerText = `${rec.attempt===1?'①':'②'} ${rec.rank}位`;
                     div.querySelector('.record-time').innerText = rec.timeStr;
-                    this.setupSelect(div.querySelector('.record-select'), rec, i);
+                    
+                    const select = div.querySelector('.record-select');
+                    select.value = rec.studentId;
+                    select.onchange = e => {
+                        this.sessionRecords[i].studentId = parseInt(e.target.value);
+                        this.updateSelectStates(); // 全体のdisabled状態だけ更新
+                    };
                 });
+                this.updateSelectStates();
                 container.scrollTop = container.scrollHeight;
             }
 
-            setupSelect(select, rec, sessionIdx) {
+            // 初回一度だけ全生徒の選択肢を作る（負荷軽減）
+            buildOptions(select) {
+                const c = this.classes[this.currentClassIdx];
+                let h = `<option value="9999">選択</option>`;
+                c.students.forEach(s => {
+                    h += `<option value="${s.id}">${s.id}. ${s.name}</option>`;
+                });
+                select.innerHTML = h;
+            }
+
+            // ★ 修正：全プルダウンのdisabled状態だけを高速に切り替える（クラッシュ対策）
+            updateSelectStates() {
                 const c = this.classes[this.currentClassIdx];
                 const pastIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => r.studentId));
                 const currentIds = new Set(this.sessionRecords.map(r => r.studentId).filter(id => id !== 9999));
-                let h = `<option value="9999" ${rec.studentId===9999?'selected':''}>選択</option>`;
-                c.students.forEach(s => {
-                    if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) return;
-                    if (pastIds.has(s.id) && s.id !== rec.studentId) return;
-                    const used = currentIds.has(s.id) && s.id !== rec.studentId;
-                    h += `<option value="${s.id}" ${s.id===rec.studentId?'selected':''} ${used?'disabled':''}>${s.id}. ${s.name}</option>`;
+                
+                const selects = document.querySelectorAll('.record-select');
+                selects.forEach((select, sessionIdx) => {
+                    const myId = parseInt(select.value);
+                    Array.from(select.options).forEach(opt => {
+                        const optId = parseInt(opt.value);
+                        if (optId === 9999) return;
+                        
+                        const student = c.students.find(s => s.id === optId);
+                        const genderMatch = this.filterGender === 'ALL' || student.gender === this.filterGender;
+                        const isUsedElsewhere = (pastIds.has(optId) || currentIds.has(optId)) && optId !== myId;
+                        
+                        opt.disabled = !genderMatch || isUsedElsewhere;
+                        opt.style.color = opt.disabled ? '#ccc' : '#000';
+                        // フィルタ外の生徒は表示自体を隠す（iOS対策）
+                        opt.style.display = genderMatch ? 'block' : 'none';
+                    });
                 });
-                if (select.innerHTML !== h) select.innerHTML = h;
-                select.onchange = e => {
-                    const id = parseInt(e.target.value);
-                    this.sessionRecords[sessionIdx].studentId = id;
-                    this.renderRecordList();
-                };
             }
 
             execReset(clear) {
-                if (clear) { this.classes[this.currentClassIdx].records = []; }
-                else {
+                if (clear) { 
+                    this.classes[this.currentClassIdx].records = []; 
+                } else {
                     const valid = this.sessionRecords.filter(r => r.studentId !== 9999).map(r => {
                         const s = this.classes[this.currentClassIdx].students.find(st => st.id === r.studentId);
                         return { ...r, studentName: s ? s.name : "不明" };
@@ -425,17 +459,18 @@
                     this.classes[this.currentClassIdx].records = this.classes[this.currentClassIdx].records.concat(valid);
                 }
                 this.isRunning = false; this.elapsedTime = 0; this.sessionRecords = [];
-                document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList();
-                this.saveDataToStorage(true); this.closeModal();
+                document.getElementById('record-list-container').innerHTML = "";
+                this.saveDataToStorage(); this.closeModal();
+                this.renderRecordList();
             }
 
             openResetAllModal() {
-                const m = document.getElementById('modal-message'); m.innerText = "すべてのクラス、名簿、記録を消去します。";
+                document.getElementById('modal-message').innerText = "すべてのクラス、名簿、記録を消去します。";
                 this.showModal('modal-options-reset-all');
             }
 
             execResetAllData() { localStorage.removeItem(this.STORAGE_KEY); this.resetInternalState(); this.goHome(); this.closeModal(); }
-            goHome() { this.state = 'HOME'; this.isRunning = false; document.getElementById('setup-panel').style.display = 'flex'; document.getElementById('header-controls').style.display = 'none'; document.getElementById('record-list-container').style.display = 'none'; this.updateRegisteredClassesList(); }
+            goHome() { this.state = 'HOME'; this.isRunning = false; document.getElementById('setup-panel').style.display = 'flex'; document.getElementById('header-controls').style.display = 'none'; document.getElementById('record-list-container').style.display = 'none'; this.updateRegisteredClassesList(); this.saveDataToStorage(); }
             
             showModal(id) {
                 document.getElementById('modal-options-default').style.display = 'none';
@@ -484,7 +519,6 @@
                 const cx = this.width / 2;
                 this.ctx.fillStyle = "#fff"; this.ctx.roundRect(20, 130, this.width - 40, 80, 15); this.ctx.fill();
                 this.ctx.fillStyle = "#333"; this.ctx.font = "bold 50px monospace"; this.ctx.textAlign = "center"; this.ctx.fillText(this.formatTime(this.elapsedTime), cx, 185);
-                
                 const bW = (this.width - 60) / 2;
                 this.drawButton(20, 220, bW, 60, this.isRunning ? "停止" : "開始", this.isRunning ? "#FF3B30" : "#34C759", () => this.toggleTimer());
                 this.drawButton(20 + bW + 20, 220, bW, 60, "リセット", "#8E8E93", () => this.openResetModal());
@@ -492,7 +526,7 @@
                 this.drawButton(20, this.height - 75, this.width - 40, 55, "保存して一覧表示", "#5856D6", () => {
                     const valid = this.sessionRecords.filter(r => r.studentId !== 9999).map(r => ({ ...r, studentName: this.classes[this.currentClassIdx].students.find(st => st.id === r.studentId).name }));
                     this.classes[this.currentClassIdx].records = this.classes[this.currentClassIdx].records.concat(valid);
-                    this.saveDataToStorage(true); this.loadDataAndGoView();
+                    this.saveDataToStorage(); this.loadDataAndGoView();
                 });
             }
 
@@ -526,13 +560,17 @@
                     const r2 = [...c.records].reverse().find(r => r.studentId === s.id && r.attempt === 2);
                     txt += `${s.id}\t${s.name}\t${s.gender==='M'?'男':'女'}\t${r1?r1.timeStr:''}\t${r2?r2.timeStr:''}\n`;
                 });
-                const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); document.execCommand('copy');
+                const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); 
+                document.execCommand('copy');
+                const flash = document.getElementById('flash-message');
+                flash.innerText = "クリップボードにコピーしました"; flash.style.display = 'block';
+                setTimeout(() => flash.style.display = 'none', 2000);
             }
             
             exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ classes: this.classes })], { type: "application/json" })); a.download = `pe_data.json`; a.click(); }
             handleFileSelect(e) { 
                 const f = e.target.files[0]; if(!f) return;
-                const r = new FileReader(); r.onload = ev => { try { const d = JSON.parse(ev.target.result); if(d.classes){ this.classes = d.classes; this.updateRegisteredClassesList(); this.saveDataToStorage(true); alert("読込完了"); } } catch(e){ alert("失敗"); } }; r.readAsText(f);
+                const r = new FileReader(); r.onload = ev => { try { const d = JSON.parse(ev.target.result); if(d.classes){ this.classes = d.classes; this.updateRegisteredClassesList(); this.saveDataToStorage(); alert("読込完了"); } } catch(e){ alert("失敗"); } }; r.readAsText(f);
             }
         }
 
