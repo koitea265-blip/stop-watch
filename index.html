@@ -188,6 +188,7 @@
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
                 
+                // 1. 内部状態をクリーンな状態に初期化
                 this.state = 'HOME';
                 this.classes = [];
                 this.currentClassIdx = -1; 
@@ -205,10 +206,10 @@
                 window.addEventListener('resize', () => this.resize());
                 this.bindEvents();
                 
-                // 1. 保存データの読み込み
+                // 2. ストレージからの復元を試行（クラスリストは維持するが、選択状態はリセット）
                 this.initStorage();
                 
-                // 2. 起動時の名簿（入力欄）初期化
+                // 3. 画面上の入力フォームをクリア
                 this.clearInputFields();
 
                 this.loop = this.loop.bind(this);
@@ -216,9 +217,8 @@
             }
 
             initStorage() {
-                let saved = null;
                 try {
-                    saved = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                    const saved = localStorage.getItem('pe_stopwatch_canvas_data_v2');
                     if (saved) {
                         const data = JSON.parse(saved);
                         if (data && Array.isArray(data.classes) && data.classes.length > 0) {
@@ -227,18 +227,16 @@
                                 if (!c.records) c.records = [];
                                 if (!c.students) c.students = [];
                             });
-                            // インデックスは初期化するため読み込むが利用しない、または存在チェックのみ
                         }
                     }
                 } catch(e) {
-                    console.error("Failed to load storage", e);
+                    console.error("Storage load failed", e);
                 }
-                // 起動時はどのクラスも選択していない状態（クリーンな開始）にする
+                // 起動時は未選択状態
                 this.currentClassIdx = -1;
                 this.updateRegisteredClassesList();
             }
 
-            // 入力フィールドを空にするメソッド
             clearInputFields() {
                 document.getElementById('reg-class-name').value = "";
                 document.getElementById('reg-student-list').value = "";
@@ -282,24 +280,17 @@
             }
 
             get currentClass() {
-                if (this.currentClassIdx < 0 || this.currentClassIdx >= this.classes.length) {
-                    return this.classes.length > 0 ? this.classes[0] : null;
-                }
+                if (this.currentClassIdx < 0 || this.currentClassIdx >= this.classes.length) return null;
                 return this.classes[this.currentClassIdx];
             }
 
             isAllMeasured() {
-                if (!this.currentClass) return false;
-                const targetStudents = this.currentClass.students.filter(s =>
-                    this.filterGender === 'ALL' || s.gender === this.filterGender
-                );
-                if (targetStudents.length === 0) return false;
-                const measuredIds = new Set(
-                    this.currentClass.records
-                        .filter(r => r.attempt === this.currentAttempt)
-                        .map(r => parseInt(r.studentId))
-                );
-                return targetStudents.every(s => measuredIds.has(s.id));
+                const c = this.currentClass;
+                if (!c) return false;
+                const targets = c.students.filter(s => this.filterGender === 'ALL' || s.gender === this.filterGender);
+                if (targets.length === 0) return false;
+                const measuredIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => parseInt(r.studentId)));
+                return targets.every(s => measuredIds.has(s.id));
             }
 
             resize() {
@@ -313,10 +304,7 @@
                 const listInput = document.getElementById('reg-student-list');
                 const className = nameInput.value.trim();
                 const listText = listInput.value.trim();
-                if (!className || !listText) {
-                    alert("クラス名と名簿を入力してください");
-                    return;
-                }
+                if (!className || !listText) { alert("クラス名と名簿を入力してください"); return; }
                 const students = listText.split('\n').map((line, idx) => {
                     let l = line.trim(); if(!l) return null;
                     let gender = 'O'; 
@@ -341,14 +329,15 @@
             }
 
             saveDataToStorage() {
+                 if (this.classes.length === 0) {
+                     localStorage.removeItem('pe_stopwatch_canvas_data_v2');
+                     return;
+                 }
                  try { localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify({ classes: this.classes })); } catch(e) {}
             }
 
             startApp() {
-                if (this.classes.length === 0) {
-                    alert("クラスを登録してください。");
-                    return;
-                }
+                if (this.classes.length === 0) { alert("クラスを登録してください。"); return; }
                 if (this.currentClassIdx < 0) this.currentClassIdx = 0;
                 this.updateClassSelector();
                 document.getElementById('gender-selector').value = this.filterGender;
@@ -364,6 +353,7 @@
 
             updateClassSelector() {
                 const sel = document.getElementById('class-selector'); sel.innerHTML = "";
+                if (this.classes.length === 0) return;
                 this.classes.forEach((c, idx) => {
                     const opt = document.createElement('option'); opt.value = idx; opt.innerText = c.name;
                     if(idx === this.currentClassIdx) opt.selected = true;
@@ -371,31 +361,23 @@
                 });
             }
 
-            changeClass(idx) { 
-                this.currentClassIdx = parseInt(idx); 
-                this.sessionRecords = [];
-                this.resetTimer(false); 
-                this.startApp(); 
-            }
-            
+            changeClass(idx) { this.currentClassIdx = parseInt(idx); this.sessionRecords = []; this.resetTimer(false); this.startApp(); }
             changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); }
             changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); }
 
             toggleTimer() {
                 if (this.isRunning) { this.isRunning = false; } 
-                else { 
-                    if (this.isAllMeasured()) return;
-                    this.startTime = Date.now() - this.elapsedTime; this.isRunning = true; 
-                }
+                else { if (this.isAllMeasured()) return; this.startTime = Date.now() - this.elapsedTime; this.isRunning = true; }
             }
 
             resetTimer(forceClearAll = false) {
                 this.isRunning = false; this.elapsedTime = 0;
-                if (forceClearAll) { if (this.currentClass) this.currentClass.records = []; this.sessionRecords = []; } 
+                const c = this.currentClass;
+                if (forceClearAll) { if (c) c.records = []; this.sessionRecords = []; } 
                 else {
-                    if (this.currentClass && this.sessionRecords.length > 0) {
+                    if (c && this.sessionRecords.length > 0) {
                         const valid = this.sessionRecords.filter(r => r.studentId !== 9999);
-                        if (valid.length > 0) this.currentClass.records = (this.currentClass.records || []).concat(valid);
+                        if (valid.length > 0) c.records = (c.records || []).concat(valid);
                     }
                     this.sessionRecords = [];
                 }
@@ -403,13 +385,44 @@
                 this.saveDataToStorage();
             }
 
+            // --- 全データ消去 (修正の要) ---
             execResetAllData() { 
-                try { localStorage.removeItem('pe_stopwatch_canvas_data_v2'); } catch(e) {} 
-                this.classes = []; this.currentClassIdx = -1; 
+                // 1. ストレージの完全削除
+                try { localStorage.clear(); } catch(e) {} 
+                
+                // 2. メモリ内の全変数を初期化
+                this.classes = []; 
+                this.currentClassIdx = -1; 
+                this.sessionRecords = [];
+                this.isRunning = false;
+                this.elapsedTime = 0;
+                this.currentAttempt = 1;
+                this.filterGender = 'ALL';
+
+                // 3. UI部品を初期化
                 this.clearInputFields();
                 this.updateRegisteredClassesList(); 
+                this.updateClassSelector(); // プルダウンを空にする
+                document.getElementById('record-list-container').innerHTML = "";
+                
+                // 4. HOME画面（設定パネル）へ強制遷移
+                this.goHome();
                 this.closeModal(); 
-                alert("全データを消去しました");
+                
+                // 5. 反映を確実にするため画面を描画
+                const msg = document.getElementById('flash-message');
+                msg.innerText = "すべてのデータを消去しました";
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; }, 2000);
+            }
+
+            goHome() { 
+                this.state = 'HOME'; 
+                this.isRunning = false; 
+                this.clearInputFields();
+                document.getElementById('setup-panel').style.display = 'flex'; 
+                document.getElementById('header-controls').style.display = 'none'; 
+                document.getElementById('record-list-container').style.display = 'none'; 
             }
 
             recordLap() {
@@ -441,7 +454,7 @@
                 const select = document.createElement('select'); select.className = 'record-select';
                 select.onchange = (e) => {
                     const id = parseInt(e.target.value);
-                    const s = (this.currentClass.students || []).find(stu => stu.id === id);
+                    const s = this.currentClass.students.find(stu => stu.id === id);
                     this.sessionRecords[index].studentId = id;
                     this.sessionRecords[index].studentName = s ? s.name : "(未選択)";
                     this.updateSelectOptions();
@@ -450,8 +463,10 @@
             }
 
             updateSelectOptions() {
-                const students = this.currentClass.students || [];
-                const pastIds = new Set((this.currentClass.records || []).filter(r => r.attempt === this.currentAttempt).map(r => parseInt(r.studentId)));
+                const c = this.currentClass;
+                if (!c) return;
+                const students = c.students || [];
+                const pastIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => parseInt(r.studentId)));
                 const currentIds = new Set(this.sessionRecords.map(r => parseInt(r.studentId)).filter(id => id !== 9999));
                 const selects = document.querySelectorAll('.record-select');
                 selects.forEach((select, idx) => {
@@ -468,15 +483,26 @@
             }
 
             loadDataAndGoView() { if(this.classes.length === 0) return; this.state = 'VIEW'; document.getElementById('setup-panel').style.display = 'none'; document.getElementById('header-controls').style.display = 'none'; const listContainer = document.getElementById('record-list-container'); listContainer.style.display = 'flex'; listContainer.style.top = '120px'; listContainer.style.bottom = '90px'; listContainer.classList.add('compact-mode'); this.sortMode = 'ID'; this.renderViewList(); }
-            renderViewList() { const container = document.getElementById('record-list-container'); container.innerHTML = ""; let sorted = [...(this.currentClass.records || [])]; if (this.sortMode === 'TIME') sorted.sort((a,b) => a.timeMs - b.timeMs); else sorted.sort((a,b) => a.studentId - b.studentId); if (this.filterGender !== 'ALL') sorted = sorted.filter(r => { const s = this.currentClass.students.find(stu => stu.id === r.studentId); return s && s.gender === this.filterGender; }); if (sorted.length === 0) { container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">データがありません</div>'; return; } sorted.forEach((r, i) => { const div = document.createElement('div'); div.className = 'record-row'; div.innerHTML = `<div style="display:flex; align-items:center; width:100%;"><div style="font-weight:bold; color:#888; width:60px;">${this.sortMode === 'TIME' ? (i+1)+'位' : ''}${r.attempt===1?'①':'②'}</div><div style="flex-grow:1; font-size:16px;">${r.studentId}. ${r.studentName}</div><div class="record-time">${r.timeStr}</div></div>`; container.appendChild(div); }); }
+            
+            renderViewList() { 
+                const container = document.getElementById('record-list-container'); 
+                container.innerHTML = ""; 
+                const c = this.currentClass;
+                if (!c) return;
+                let sorted = [...c.records]; 
+                if (this.sortMode === 'TIME') sorted.sort((a,b) => a.timeMs - b.timeMs); else sorted.sort((a,b) => a.studentId - b.studentId); 
+                if (this.filterGender !== 'ALL') sorted = sorted.filter(r => { const s = c.students.find(stu => stu.id === r.studentId); return s && s.gender === this.filterGender; }); 
+                if (sorted.length === 0) { container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">データがありません</div>'; return; } 
+                sorted.forEach((r, i) => { const div = document.createElement('div'); div.className = 'record-row'; div.innerHTML = `<div style="display:flex; align-items:center; width:100%;"><div style="font-weight:bold; color:#888; width:60px;">${this.sortMode === 'TIME' ? (i+1)+'位' : ''}${r.attempt===1?'①':'②'}</div><div style="flex-grow:1; font-size:16px;">${r.studentId}. ${r.studentName}</div><div class="record-time">${r.timeStr}</div></div>`; container.appendChild(div); }); 
+            }
+
             formatTime(ms) { let d = new Date(ms); return `${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}.${String(Math.floor(d.getUTCMilliseconds()/10)).padStart(2,'0')}`; }
 
             loop() {
                 if (this.isRunning) this.elapsedTime = Date.now() - this.startTime;
                 this.ctx.fillStyle = "#f2f2f7"; this.ctx.fillRect(0, 0, this.width, this.height);
                 this.buttons = [];
-                if (this.state === 'RECORD') this.drawRecordScreen();
-                else if (this.state === 'VIEW') this.drawViewScreen();
+                if (this.state === 'RECORD') this.drawRecordScreen(); else if (this.state === 'VIEW') this.drawViewScreen();
                 requestAnimationFrame(this.loop);
             }
 
@@ -516,15 +542,8 @@
                 this.buttons.push({x, y, w, h, onClick});
             }
 
-            saveAndGoView() { if (this.sessionRecords.length > 0) { const v = this.sessionRecords.filter(r => r.studentId !== 9999); this.currentClass.records = (this.currentClass.records || []).concat(v); this.sessionRecords = []; } this.saveDataToStorage(); this.loadDataAndGoView(); }
+            saveAndGoView() { if (this.sessionRecords.length > 0) { const v = this.sessionRecords.filter(r => r.studentId !== 9999); if (this.currentClass) this.currentClass.records = (this.currentClass.records || []).concat(v); this.sessionRecords = []; } this.saveDataToStorage(); this.loadDataAndGoView(); }
             backToRecord() { this.state = 'RECORD'; this.startApp(); }
-            goHome() { 
-                this.state = 'HOME'; this.isRunning = false; 
-                this.clearInputFields();
-                document.getElementById('setup-panel').style.display = 'flex'; 
-                document.getElementById('header-controls').style.display = 'none'; 
-                document.getElementById('record-list-container').style.display = 'none'; 
-            }
             closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
             openResetModal() { document.getElementById('modal-options-default').style.display = 'flex'; document.getElementById('modal-options-confirm').style.display = 'none'; document.getElementById('modal-options-reset-all').style.display = 'none'; document.getElementById('modal-overlay').style.display = 'flex'; }
             showClearConfirm() { document.getElementById('modal-options-default').style.display = 'none'; document.getElementById('modal-options-confirm').style.display = 'flex'; }
@@ -532,7 +551,7 @@
             handleInputStart(rX, rY) { const rect = this.container.getBoundingClientRect(); const x = rX - rect.left, y = rY - rect.top; for (let b of this.buttons) { if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { this.activeButton = b; return; } } }
             handleInputMove() {}
             handleInputEnd() { if (this.activeButton) { if(this.activeButton.onClick) this.activeButton.onClick(); this.activeButton = null; } }
-            copyToClipboard() { let txt = `【${this.currentClass.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`; const all = (this.currentClass.records || []); [...(this.currentClass.students || [])].sort((a,b)=>a.id-b.id).forEach(s => { const r1 = [...all].reverse().find(r => r.studentId === s.id && r.attempt === 1); const r2 = [...all].reverse().find(r => r.studentId === s.id && r.attempt === 2); txt += `${s.id}\t${s.name}\t${s.gender === 'M'?'男':'女'}\t${r1?r1.timeStr:''}\t${r2?r2.timeStr:''}\n`; }); const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); document.execCommand('copy'); alert("コピーしました！"); }
+            copyToClipboard() { if(!this.currentClass) return; let txt = `【${this.currentClass.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`; const all = (this.currentClass.records || []); [...(this.currentClass.students || [])].sort((a,b)=>a.id-b.id).forEach(s => { const r1 = [...all].reverse().find(r => r.studentId === s.id && r.attempt === 1); const r2 = [...all].reverse().find(r => r.studentId === s.id && r.attempt === 2); txt += `${s.id}\t${s.name}\t${s.gender === 'M'?'男':'女'}\t${r1?r1.timeStr:''}\t${r2?r2.timeStr:''}\n`; }); const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); document.execCommand('copy'); alert("コピーしました！"); }
             exportData() { const blob = new Blob([JSON.stringify({ classes: this.classes })], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `pe_data.json`; a.click(); }
             importData() { document.getElementById('file-input').click(); }
             handleFileSelect(e) { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const d = JSON.parse(ev.target.result); if(d && Array.isArray(d.classes)){ this.classes = d.classes; this.updateRegisteredClassesList(); this.saveDataToStorage(); alert("読み込みました"); } } catch(e){ alert("失敗"); } }; r.readAsText(f); }
