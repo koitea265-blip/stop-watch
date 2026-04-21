@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- ズームを完全に禁止し、デバイス幅に固定 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
     <!-- オフライン/アプリ化用の設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,34 +13,27 @@
 
     <title>Canvasストップウォッチ</title>
     <style>
-        /* 画面全体の固定設定（Chromebook対策） */
+        /* 画面全体の固定設定 */
         html, body {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* スクロールバーを消す */
-            background-color: #333; /* アプリ外の背景色 */
+            overflow: hidden;
+            background-color: #333;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            
-            /* 重要: 画面全体を強制的に固定 */
             position: fixed;
             top: 0;
             left: 0;
-            
-            /* バウンスや全体スクロールを防ぐ */
             overscroll-behavior: none;
+            /* ここではnoneにし、必要な箇所のみ後で許可する */
             touch-action: none; 
-            
-            /* テキスト選択を防止（アプリっぽくする） */
             user-select: none;
             -webkit-user-select: none;
-            
             display: flex;
             justify-content: center;
         }
 
-        /* アプリ本体のコンテナ */
         #app-container {
             position: relative;
             width: 100%;
@@ -48,24 +42,23 @@
             background-color: #f2f2f7;
             overflow: hidden;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            /* コンテナ内も基本はタッチ無効（Canvas用） */
+            touch-action: none; 
         }
 
-        /* Canvas */
         canvas {
             display: block;
             width: 100%;
             height: 100%;
-            touch-action: none; /* Canvas上のブラウザ動作を無効化 */
+            touch-action: none;
         }
 
-        /* HTML UI オーバーレイ */
         #ui-layer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
         }
 
-        /* 設定画面パネル */
         #setup-panel {
             pointer-events: auto;
             background: rgba(255, 255, 255, 0.95);
@@ -80,21 +73,22 @@
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            max-height: 95%; /* 高さを確保 */
-            overflow-y: auto; /* 内容が多い場合はスクロール */
+            max-height: 95%;
+            overflow-y: auto;
+            /* スクロール領域にはpan-yを明示的に指定（フリーズ回避） */
+            touch-action: pan-y; 
             z-index: 10;
         }
 
-        /* アプリタイトル (パネル内) */
         .app-title {
-            font-size: 28px; /* サイズ調整: 1行に収まるように */
+            font-size: 28px;
             font-weight: bold;
-            color: #333; /* 黒色 */
+            color: #333;
             text-align: center;
             margin: 10px 0 15px 0;
             line-height: 1.2;
             letter-spacing: 0.02em;
-            white-space: nowrap; /* 折り返し防止 */
+            white-space: nowrap;
         }
 
         input, textarea, select {
@@ -106,11 +100,10 @@
             font-size: 16px;
         }
         
-        /* 名簿入力欄の高さを確保 (縮小防止の設定を追加) */
         #reg-student-list {
             height: 200px !important;
-            min-height: 200px !important; /* Flexboxによる縮小を防ぐ */
-            flex-shrink: 0; /* 親要素が狭くても縮まないようにする */
+            min-height: 200px !important;
+            flex-shrink: 0;
             font-family: monospace;
             line-height: 1.4;
             resize: vertical;
@@ -134,33 +127,21 @@
         .btn-green { background: #34C759; color: white; }
         .btn-danger { background: #FF3B30; color: white; }
         
-        /* ボタン横並び用 */
-        .button-row {
-            display: flex;
-            gap: 8px;
-            justify-content: space-between;
-        }
-        .button-row button {
-            flex: 1; /* 等幅 */
-            padding: 12px 5px; /* 横パディングを減らして文字を入れる */
-            font-size: 14px; /* 少し小さく */
-            white-space: nowrap;
-        }
+        .button-row { display: flex; gap: 8px; justify-content: space-between; }
+        .button-row button { flex: 1; padding: 12px 5px; font-size: 14px; white-space: nowrap; }
 
         #registered-classes-list {
             font-size: 14px; color: #555; background: #eee;
             padding: 10px; border-radius: 8px; min-height: 40px;
         }
 
-        /* --- ヘッダーコントロール (クラス・性別・回数) --- */
         #header-controls {
             pointer-events: auto;
             position: absolute;
-            top: 10px;
-            left: 50%;
+            top: 10px; left: 50%;
             transform: translateX(-50%);
             width: 90%;
-            display: none; /* 初期非表示 */
+            display: none;
             z-index: 100;
             background: rgba(255,255,255,0.9);
             padding: 10px;
@@ -169,56 +150,35 @@
             box-sizing: border-box;
         }
 
-        .control-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
+        .control-row { display: flex; gap: 10px; margin-bottom: 8px; }
         .control-row:last-child { margin-bottom: 0; }
-
         #class-selector { flex: 2; padding: 8px; font-weight: bold; }
         #gender-selector { flex: 1; padding: 8px; }
 
         .radio-group {
-            display: flex;
-            justify-content: space-around;
-            width: 100%;
-            background: #eee;
-            border-radius: 8px;
-            padding: 4px;
+            display: flex; justify-content: space-around; width: 100%;
+            background: #eee; border-radius: 8px; padding: 4px;
         }
         .radio-label {
-            flex: 1;
-            text-align: center;
-            padding: 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 14px;
-            color: #555;
+            flex: 1; text-align: center; padding: 8px; border-radius: 6px;
+            cursor: pointer; font-weight: bold; font-size: 14px; color: #555;
             transition: 0.2s;
         }
-        /* ラジオボタン本体は隠す */
         .radio-input { display: none; }
-        /* 選択時のスタイル */
         .radio-input:checked + .radio-label {
-            background: #007AFF;
-            color: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            background: #007AFF; color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
 
-        /* --- 記録リスト --- */
         #record-list-container {
             pointer-events: auto;
             position: absolute;
-            /* 初期位置は計測画面用。JSで書き換える */
-            top: 360px; 
-            bottom: 85px;
-            left: 50%;
+            top: 360px; bottom: 85px; left: 50%;
             transform: translateX(-50%);
             width: 90%;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
+            /* 縦スクロールを明示的に許可し、ブロック現象を防ぐ */
+            touch-action: pan-y;
             display: none;
             flex-direction: column;
             gap: 6px;
@@ -237,34 +197,14 @@
             min-height: 44px;
         }
 
-        /* --- コンパクトモード (一覧画面用) --- */
-        #record-list-container.compact-mode {
-            gap: 2px; /* 行間を詰める */
-        }
-        #record-list-container.compact-mode .record-row {
-            padding: 4px 10px; /* 上下のパディングを減らす */
-            min-height: 28px;  /* 最小高さを減らす */
-            border-radius: 4px;
-        }
-        #record-list-container.compact-mode .record-row div {
-            font-size: 13px !important; /* 文字サイズも少し小さく */
-        }
-        #record-list-container.compact-mode .record-time {
-            font-size: 15px !important;
-        }
+        #record-list-container.compact-mode { gap: 2px; }
+        #record-list-container.compact-mode .record-row { padding: 4px 10px; min-height: 28px; border-radius: 4px; }
+        #record-list-container.compact-mode .record-row div { font-size: 13px !important; }
+        #record-list-container.compact-mode .record-time { font-size: 15px !important; }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .record-info {
-            display: flex;
-            flex-direction: column;
-            flex-shrink: 0;
-            margin-right: 15px; 
-        }
-
+        .record-info { display: flex; flex-direction: column; flex-shrink: 0; margin-right: 15px; }
         .record-rank { font-weight: bold; font-size: 13px; color: #888; }
         .record-time { font-family: monospace; font-size: 18px; font-weight: bold; color: #333; }
 
@@ -275,24 +215,19 @@
             touch-action: pan-y;
         }
 
-        /* コピー用隠し要素 */
         #clipboard-target { position: absolute; top: -9999px; }
 
-        /* --- モーダル (リセット確認用) --- */
         #modal-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: none;
+            background: rgba(0, 0, 0, 0.5); display: none;
             justify-content: center; align-items: center;
-            z-index: 2000; pointer-events: auto;
-            touch-action: none;
+            z-index: 2000; pointer-events: auto; touch-action: none;
         }
         
         #modal-box {
             background: #fff; padding: 20px; border-radius: 12px;
             width: 85%; max-width: 350px; text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            animation: popIn 0.2s ease-out;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3); animation: popIn 0.2s ease-out;
             touch-action: auto;
         }
 
@@ -314,9 +249,7 @@
         <canvas id="gameCanvas"></canvas>
 
         <div id="ui-layer">
-            <!-- 設定画面 -->
             <div id="setup-panel">
-                <!-- タイトル -->
                 <h1 class="app-title">体育ストップウォッチ</h1>
                 
                 <h2 style="margin:0 0 10px 0; font-size:16px; text-align:center; color:#666;">クラス登録</h2>
@@ -330,7 +263,6 @@
                 <input type="text" id="reg-class-name" placeholder="クラス名 (例: 6年1組)">
                 <textarea id="reg-student-list" placeholder="出席番号順に入力&#13;&#10;例1: 山田 太郎 男&#13;&#10;例2: 1 山田 太郎 男 (Excelから貼付)"></textarea>
                 
-                <!-- ボタン横並びエリア -->
                 <div class="button-row">
                     <button id="btn-add-class" class="html-btn btn-green">リストに追加</button>
                     <button id="btn-export" class="html-btn btn-outline" style="background:#f0f8ff;">データ保存</button>
@@ -345,16 +277,13 @@
                 <div style="font-size:12px; color:#666;">②登録が終わったら計測へ</div>
                 <button id="btn-start-app" class="html-btn">計測画面へ</button>
                 
-                <!-- リセットボタン -->
                 <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
                     <button id="btn-reset-all" class="html-btn btn-danger" style="font-size: 13px; background-color: #FF3B30;">⚠ 全データ消去 (リセット)</button>
                 </div>
             </div>
             
-            <!-- ファイル読み込み用隠しインプット -->
             <input type="file" id="file-input" style="display:none" accept=".json">
 
-            <!-- ヘッダーコントロール（クラス・性別・回数） -->
             <div id="header-controls">
                 <div class="control-row">
                     <select id="class-selector"></select>
@@ -375,17 +304,14 @@
                 </div>
             </div>
 
-            <!-- 記録リスト -->
             <div id="record-list-container"></div>
         </div>
 
-        <!-- リセット確認モーダル -->
         <div id="modal-overlay">
             <div id="modal-box">
                 <h3 id="modal-title" style="margin:0 0 10px 0; color:#333;">リセット操作</h3>
                 <p style="margin:0; font-size:14px; color:#666;" id="modal-message">操作を選択してください。</p>
                 
-                <!-- 通常のリセット選択肢 (計測画面用) -->
                 <div id="modal-options-default" class="modal-buttons" style="display:none;">
                     <button id="btn-modal-next-race" class="html-btn btn-green">
                         続けて計測する
@@ -398,14 +324,12 @@
                     <button id="btn-modal-cancel" class="html-btn btn-outline">キャンセル</button>
                 </div>
 
-                <!-- 計測画面での全消去確認 -->
                 <div id="modal-options-confirm" class="modal-buttons" style="display:none;">
                     <p style="color:#FF3B30; font-weight:bold; margin:0;">本当に全消去しますか？<br>この操作は取り消せません。</p>
                     <button id="btn-modal-confirm-clear" class="html-btn btn-danger">はい、消去します</button>
                     <button id="btn-modal-confirm-cancel" class="html-btn btn-outline">キャンセル</button>
                 </div>
 
-                <!-- TOP画面での全データ消去確認 -->
                 <div id="modal-options-reset-all" class="modal-buttons" style="display:none;">
                     <p style="color:#FF3B30; font-weight:bold; margin:0; text-align:left;">
                         保存されている全てのクラス・名簿・記録データを消去して初期化します。<br>
@@ -443,34 +367,36 @@
                 
                 this.buttons = [];
                 this.activeButton = null;
-                
                 this.sortMode = 'TIME';
 
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 
-                // Canvasイベント
+                // イベントリスナーの安全化
                 this.canvas.addEventListener('mousedown', (e) => this.handleInputStart(e.clientX, e.clientY));
                 this.canvas.addEventListener('touchstart', (e) => {
                     if(e.cancelable) e.preventDefault();
-                    const touch = e.touches[0];
-                    this.handleInputStart(touch.clientX, touch.clientY);
+                    if(e.touches && e.touches.length > 0) {
+                        this.handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
+                    }
                 }, {passive: false});
 
                 this.canvas.addEventListener('mousemove', (e) => this.handleInputMove(e.clientX, e.clientY));
                 this.canvas.addEventListener('touchmove', (e) => {
-                    const touch = e.touches[0];
-                    this.handleInputMove(touch.clientX, touch.clientY);
+                    if(e.cancelable) e.preventDefault();
+                    if(e.touches && e.touches.length > 0) {
+                        this.handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
+                    }
                 }, {passive: false});
 
                 this.canvas.addEventListener('mouseup', (e) => this.handleInputEnd(e.clientX, e.clientY));
                 this.canvas.addEventListener('touchend', (e) => {
                     if(e.cancelable) e.preventDefault();
-                    const touch = e.changedTouches[0];
-                    this.handleInputEnd(touch.clientX, touch.clientY);
+                    if(e.changedTouches && e.changedTouches.length > 0) {
+                        this.handleInputEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+                    }
                 }, {passive: false});
 
-                // UI Event Bindings
                 document.getElementById('btn-add-class').addEventListener('click', () => this.addClass());
                 document.getElementById('btn-export').addEventListener('click', () => this.exportData());
                 document.getElementById('btn-import').addEventListener('click', () => this.importData());
@@ -481,14 +407,12 @@
                 document.getElementById('class-selector').addEventListener('change', (e) => this.changeClass(e.target.value));
                 document.getElementById('gender-selector').addEventListener('change', (e) => this.changeGenderFilter(e.target.value));
                 
-                // Modal Events (Reset Timer)
                 document.getElementById('btn-modal-next-race').addEventListener('click', () => this.execReset(false));
                 document.getElementById('btn-modal-clear-all').addEventListener('click', () => this.showClearConfirm());
                 document.getElementById('btn-modal-cancel').addEventListener('click', () => this.closeModal());
                 document.getElementById('btn-modal-confirm-clear').addEventListener('click', () => this.execReset(true));
                 document.getElementById('btn-modal-confirm-cancel').addEventListener('click', () => this.closeModal());
                 
-                // Modal Events (Reset All Data)
                 document.getElementById('btn-modal-reset-all-confirm').addEventListener('click', () => this.execResetAllData());
                 document.getElementById('btn-modal-reset-all-cancel').addEventListener('click', () => this.closeModal());
 
@@ -507,14 +431,12 @@
                         const data = JSON.parse(saved);
                         if (data && data.classes && data.classes.length > 0) {
                             this.classes = data.classes;
-                            // 既存データの安全性確保
                             this.classes.forEach(c => {
                                 if(!c.records) c.records = [];
                                 if(!c.students) c.students = [];
                             });
                             this.updateRegisteredClassesList();
                             
-                            // 保存されていた設定を復元
                             if (typeof data.currentClassIdx !== 'undefined') {
                                 this.currentClassIdx = data.currentClassIdx;
                             } else {
@@ -542,7 +464,6 @@
                 this.offsetY = rect.top;
             }
 
-            // --- 設定画面 ---
             addClass() {
                 const nameInput = document.getElementById('reg-class-name');
                 const listInput = document.getElementById('reg-student-list');
@@ -557,15 +478,11 @@
                     if(!l) return null;
                     
                     let gender = 'O'; 
-                    
-                    // タブまたはスペースで分割
                     let parts = l.split(/[\t\s　]+/);
-                    // 空要素削除
                     parts = parts.filter(p => p);
 
                     if (parts.length === 0) return null;
 
-                    // 性別判定 (末尾)
                     const last = parts[parts.length - 1];
                     if (['男','M','m','boy','Boy','男子'].includes(last)) {
                         gender = 'M';
@@ -575,17 +492,12 @@
                         parts.pop();
                     }
                     
-                    // 出席番号除去 (先頭) - 数字だけ、あるいは数字+記号
                     if (parts.length > 0 && /^\d+[\.\:．：]?$/.test(parts[0])) {
                          parts.shift();
                     }
 
                     let name = parts.join(' ');
-                    
-                    // 名前が空になってしまった場合の救済
-                    if (!name) {
-                        name = l; 
-                    }
+                    if (!name) { name = l; }
 
                     return { id: idx + 1, name: name, gender: gender };
                 }).filter(s => s !== null);
@@ -600,7 +512,7 @@
                 listInput.value = "";
                 
                 this.updateRegisteredClassesList();
-                this.saveDataToStorage(); // 追加時も自動保存
+                this.saveDataToStorage();
                 alert(`「${className}」を追加しました`);
             }
             
@@ -613,7 +525,6 @@
                 }
             }
 
-            // データエクスポート (JSONファイル保存)
             exportData() {
                 if (this.classes.length === 0) {
                     alert("保存するデータがありません");
@@ -636,12 +547,10 @@
                 URL.revokeObjectURL(url);
             }
 
-            // データインポート (トリガー)
             importData() {
                 document.getElementById('file-input').click();
             }
 
-            // ファイル選択時処理
             handleFileSelect(event) {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -662,7 +571,7 @@
                             } else {
                                 this.classes = this.classes.concat(newClasses);
                             }
-                            this.currentClassIdx = -1; // リセット
+                            this.currentClassIdx = -1;
                             this.updateRegisteredClassesList();
                             this.saveDataToStorage();
                             alert("データを読み込みました");
@@ -673,7 +582,6 @@
                         console.error(err);
                         alert("読み込みに失敗しました");
                     }
-                    // inputをリセットして同じファイルを再選択できるようにする
                     event.target.value = '';
                 };
                 reader.readAsText(file);
@@ -691,7 +599,6 @@
                 }
             }
 
-            // 全データリセット (モーダルを開く)
             openResetAllModal() {
                 const modal = document.getElementById('modal-overlay');
                 document.getElementById('modal-title').innerText = "全データ消去";
@@ -704,7 +611,6 @@
                 modal.style.display = 'flex';
             }
             
-            // 全データリセット (実行)
             execResetAllData() {
                 try {
                     localStorage.removeItem('pe_stopwatch_canvas_data_v2');
@@ -722,11 +628,9 @@
                 setTimeout(() => { msg.style.display = 'none'; }, 2500);
             }
 
-            // --- 画面遷移 ---
             startApp() {
                 if (this.classes.length === 0) { alert("クラスを登録してください"); return; }
                 
-                // 初回のみ初期化（すでに選択済みの場合は維持）
                 if (this.currentClassIdx < 0) {
                     this.currentClassIdx = 0;
                     this.currentAttempt = 1;
@@ -734,14 +638,11 @@
                     this.sessionRecords = [];
                     this.resetTimer(false);
                     
-                    // UI初期化
                     document.getElementById('gender-selector').value = 'ALL';
                     document.getElementById('attempt1').checked = true;
                 }
                 
                 this.updateClassSelector();
-                
-                // 設定値をUIに反映（戻ってきたとき用）
                 document.getElementById('gender-selector').value = this.filterGender;
                 document.getElementById('attempt' + this.currentAttempt).checked = true;
 
@@ -749,14 +650,13 @@
                 document.getElementById('setup-panel').style.display = 'none';
                 document.getElementById('header-controls').style.display = 'block';
                 
-                // HTMLリスト表示
                 const listContainer = document.getElementById('record-list-container');
                 listContainer.style.display = 'flex';
                 listContainer.style.top = '360px';
                 listContainer.style.bottom = '85px';
-                listContainer.classList.remove('compact-mode'); // 通常モード
+                listContainer.classList.remove('compact-mode'); 
                 
-                this.renderRecordList(false); // ★自動スクロール無効化（1位を固定）
+                this.renderRecordList(false); 
             }
 
             loadDataAndGoView() {
@@ -790,12 +690,11 @@
                 document.getElementById('setup-panel').style.display = 'none';
                 document.getElementById('header-controls').style.display = 'none'; 
                 
-                // VIEW用のリスト表示設定
                 const listContainer = document.getElementById('record-list-container');
                 listContainer.style.display = 'flex';
                 listContainer.style.top = '120px';
                 listContainer.style.bottom = '90px'; 
-                listContainer.classList.add('compact-mode'); // コンパクトモード
+                listContainer.classList.add('compact-mode');
                 
                 this.sortMode = 'ID'; 
                 this.renderViewList();
@@ -865,7 +764,6 @@
                 }
             }
 
-            // --- タイマー & 記録 ---
             toggleTimer() {
                 if (this.isRunning) {
                     this.isRunning = false;
@@ -892,7 +790,7 @@
                 }
 
                 if(this.state === 'RECORD') {
-                    this.renderRecordList(false); // ★自動スクロール無効化
+                    this.renderRecordList(false);
                 }
                 
                 this.saveDataToStorage();
@@ -937,7 +835,7 @@
 
                 const newRecord = {
                     rank: this.sessionRecords.length + 1,
-                    attempt: this.currentAttempt, // 1 or 2
+                    attempt: this.currentAttempt,
                     studentId: 9999,
                     studentName: "(未選択)",
                     timeMs: currentMs,
@@ -945,10 +843,9 @@
                 };
 
                 this.sessionRecords.push(newRecord);
-                this.renderRecordList(false); // ★自動スクロール無効化
+                this.renderRecordList(false);
             }
             
-            // 計測画面用：プルダウン付きリスト
             renderRecordList(autoScroll = false) {
                 const container = document.getElementById('record-list-container');
                 if (!container) return; 
@@ -961,7 +858,6 @@
                         .filter(id => id !== 9999)
                 );
 
-                // 堅牢性の確保：records配列がない事態を防止
                 const pastRecords = this.currentClass.records || [];
                 const pastAttemptUsedIds = new Set(
                     pastRecords
@@ -1032,7 +928,12 @@
                     
                     this.sessionRecords[index].studentId = newId;
                     this.sessionRecords[index].studentName = studentName;
-                    this.renderRecordList(false);
+                    
+                    // 【重要】DOM破壊によるネイティブUI（プルダウン等）のフリーズを防ぐため、
+                    // コールスタックを解放してから再描画処理を実行する
+                    setTimeout(() => {
+                        this.renderRecordList(false);
+                    }, 50);
                 };
 
                 div.appendChild(infoDiv);
@@ -1040,7 +941,6 @@
                 container.appendChild(div);
             }
 
-            // 閲覧画面用：テキストのみリスト (コンパクト)
             renderViewList() {
                 const container = document.getElementById('record-list-container');
                 container.innerHTML = "";
@@ -1100,7 +1000,7 @@
                     this.currentClass.records = (this.currentClass.records || []).concat(this.sessionRecords);
                     this.sessionRecords = [];
                 }
-                this.saveDataToStorage(); // 統一メソッドへ委譲し、エラーハンドリングを適用
+                this.saveDataToStorage(); 
                 this.loadDataAndGoView();
             }
 
@@ -1139,11 +1039,11 @@
                 }
             }
 
-            // Input Handling (Common)
             getRelativePos(clientX, clientY) {
                 const rect = this.container.getBoundingClientRect();
                 return { x: clientX - rect.left, y: clientY - rect.top };
             }
+
             handleInputStart(rawX, rawY) {
                 const {x, y} = this.getRelativePos(rawX, rawY);
                 if (this.state === 'VIEW') {
@@ -1156,6 +1056,7 @@
                     }
                 }
             }
+
             handleInputMove(rawX, rawY) {
                 const {x, y} = this.getRelativePos(rawX, rawY);
                 if (this.activeButton) {
@@ -1171,6 +1072,7 @@
                     this.lastTouchY = y;
                 }
             }
+
             handleInputEnd(rawX, rawY) {
                 if (this.activeButton) {
                     const {x, y} = this.getRelativePos(rawX, rawY);
@@ -1187,7 +1089,7 @@
                 this.ctx.fillStyle = "#f2f2f7"; this.ctx.fillRect(0, 0, this.width, this.height);
                 this.buttons = [];
                 if (this.state === 'HOME') {
-                    // 背景のタイトル描画はHTML側に移したので削除
+                    // 何もしない
                 } else if (this.state === 'RECORD') {
                     this.drawRecordScreen();
                 } else if (this.state === 'VIEW') {
@@ -1252,12 +1154,10 @@
                 this.drawButton(20, btnY, btnW, 30, "タイム順", this.sortMode === 'TIME' ? "#007AFF" : "#ccc", () => { 
                     this.sortMode = 'TIME'; this.renderViewList(); 
                 });
-                // バグ修正: Y座標の引数を btnW から btnY へ変更
                 this.drawButton(20 + btnW + 20, btnY, btnW, 30, "出席番号順", this.sortMode === 'ID' ? "#007AFF" : "#ccc", () => { 
                     this.sortMode = 'ID'; this.renderViewList(); 
                 });
 
-                // フッター背景
                 const footerH = 80;
                 this.ctx.fillStyle = "#f2f2f7";
                 this.ctx.fillRect(0, this.height - footerH, this.width, footerH);
