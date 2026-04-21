@@ -495,12 +495,23 @@
                 this.loop = this.loop.bind(this);
                 requestAnimationFrame(this.loop);
                 
-                const saved = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                let saved = null;
+                try {
+                    saved = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                } catch(e) {
+                    console.warn("Storage access denied:", e);
+                }
+
                 if (saved) {
                     try {
                         const data = JSON.parse(saved);
                         if (data && data.classes && data.classes.length > 0) {
                             this.classes = data.classes;
+                            // 既存データの安全性確保
+                            this.classes.forEach(c => {
+                                if(!c.records) c.records = [];
+                                if(!c.students) c.students = [];
+                            });
                             this.updateRegisteredClassesList();
                             
                             // 保存されていた設定を復元
@@ -640,10 +651,16 @@
                     try {
                         const data = JSON.parse(e.target.result);
                         if (data && Array.isArray(data.classes)) {
+                            const newClasses = data.classes;
+                            newClasses.forEach(c => {
+                                if(!c.records) c.records = [];
+                                if(!c.students) c.students = [];
+                            });
+
                             if (confirm("現在のデータに上書きしますか？\n（キャンセルすると追加読み込みになります）")) {
-                                this.classes = data.classes;
+                                this.classes = newClasses;
                             } else {
-                                this.classes = this.classes.concat(data.classes);
+                                this.classes = this.classes.concat(newClasses);
                             }
                             this.currentClassIdx = -1; // リセット
                             this.updateRegisteredClassesList();
@@ -667,7 +684,11 @@
                     classes: this.classes,
                     currentClassIdx: this.currentClassIdx
                 };
-                localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify(data));
+                try {
+                    localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify(data));
+                } catch(e) {
+                    console.warn("Storage save error:", e);
+                }
             }
 
             // 全データリセット (モーダルを開く)
@@ -685,7 +706,11 @@
             
             // 全データリセット (実行)
             execResetAllData() {
-                localStorage.removeItem('pe_stopwatch_canvas_data_v2');
+                try {
+                    localStorage.removeItem('pe_stopwatch_canvas_data_v2');
+                } catch(e) {
+                    console.warn("Storage remove error:", e);
+                }
                 this.classes = [];
                 this.currentClassIdx = -1;
                 this.updateRegisteredClassesList();
@@ -731,15 +756,26 @@
                 listContainer.style.bottom = '85px';
                 listContainer.classList.remove('compact-mode'); // 通常モード
                 
-                this.renderRecordList(false); // ★修正：自動スクロール無効化（1位を固定）
+                this.renderRecordList(false); // ★自動スクロール無効化（1位を固定）
             }
 
             loadDataAndGoView() {
-                const json = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                let json = null;
+                try {
+                    json = localStorage.getItem('pe_stopwatch_canvas_data_v2');
+                } catch(e) {
+                    console.warn("Storage load error:", e);
+                }
+
                 if(json) {
                     try {
                         const data = JSON.parse(json);
                         this.classes = data.classes || [];
+                        this.classes.forEach(c => {
+                            if(!c.records) c.records = [];
+                            if(!c.students) c.students = [];
+                        });
+                        
                         if (typeof data.currentClassIdx !== 'undefined') {
                             this.currentClassIdx = data.currentClassIdx;
                         } else {
@@ -747,6 +783,7 @@
                         }
                     } catch(e) { console.error(e); }
                 }
+                
                 if(this.classes.length === 0) { alert("データがありません"); return; }
                 this.updateClassSelector();
                 this.state = 'VIEW';
@@ -855,7 +892,7 @@
                 }
 
                 if(this.state === 'RECORD') {
-                    this.renderRecordList(false); // ★修正：自動スクロール無効化
+                    this.renderRecordList(false); // ★自動スクロール無効化
                 }
                 
                 this.saveDataToStorage();
@@ -908,7 +945,7 @@
                 };
 
                 this.sessionRecords.push(newRecord);
-                this.renderRecordList(false); // ★修正：自動スクロール無効化
+                this.renderRecordList(false); // ★自動スクロール無効化
             }
             
             // 計測画面用：プルダウン付きリスト
@@ -924,8 +961,10 @@
                         .filter(id => id !== 9999)
                 );
 
+                // 堅牢性の確保：records配列がない事態を防止
+                const pastRecords = this.currentClass.records || [];
                 const pastAttemptUsedIds = new Set(
-                    this.currentClass.records
+                    pastRecords
                         .filter(r => r.attempt === this.currentAttempt)
                         .map(r => parseInt(r.studentId))
                         .filter(id => id !== 9999)
@@ -966,7 +1005,8 @@
                 if (record.studentId == 9999) defOpt.selected = true;
                 select.appendChild(defOpt);
 
-                this.currentClass.students.forEach(s => {
+                const students = this.currentClass.students || [];
+                students.forEach(s => {
                     if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) {
                         if (s.id !== parseInt(record.studentId)) return;
                     }
@@ -986,7 +1026,7 @@
                     const newId = parseInt(e.target.value);
                     let studentName = "(未選択)";
                     if(newId !== 9999) {
-                        const s = this.currentClass.students.find(stu => stu.id === newId);
+                        const s = students.find(stu => stu.id === newId);
                         if(s) studentName = s.name;
                     }
                     
@@ -1005,7 +1045,7 @@
                 const container = document.getElementById('record-list-container');
                 container.innerHTML = "";
                 
-                let sortedRecords = [...this.currentClass.records];
+                let sortedRecords = [...(this.currentClass.records || [])];
                 
                 if (this.sortMode === 'TIME') {
                     sortedRecords.sort((a,b) => a.timeMs - b.timeMs);
@@ -1016,7 +1056,7 @@
                 if (this.filterGender !== 'ALL') {
                     sortedRecords = sortedRecords.filter(r => {
                         if (r.studentId === 9999) return true;
-                        const s = this.currentClass.students.find(stu => stu.id === r.studentId);
+                        const s = (this.currentClass.students || []).find(stu => stu.id === r.studentId);
                         return s && s.gender === this.filterGender;
                     });
                 }
@@ -1057,14 +1097,10 @@
 
             saveAndGoView() {
                 if (this.sessionRecords.length > 0) {
-                    this.currentClass.records = this.currentClass.records.concat(this.sessionRecords);
+                    this.currentClass.records = (this.currentClass.records || []).concat(this.sessionRecords);
                     this.sessionRecords = [];
                 }
-                const data = {
-                    classes: this.classes,
-                    currentClassIdx: this.currentClassIdx
-                };
-                localStorage.setItem('pe_stopwatch_canvas_data_v2', JSON.stringify(data));
+                this.saveDataToStorage(); // 統一メソッドへ委譲し、エラーハンドリングを適用
                 this.loadDataAndGoView();
             }
 
@@ -1078,8 +1114,8 @@
 
             copyToClipboard() {
                 let text = `【${this.currentClass.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`;
-                let studentsSorted = [...this.currentClass.students].sort((a,b) => a.id - b.id);
-                let allRecs = this.currentClass.records.concat(this.sessionRecords);
+                let studentsSorted = [...(this.currentClass.students || [])].sort((a,b) => a.id - b.id);
+                let allRecs = (this.currentClass.records || []).concat(this.sessionRecords);
 
                 studentsSorted.forEach(s => {
                     const rec1 = [...allRecs].reverse().find(r => r.studentId === s.id && r.attempt === 1);
@@ -1095,8 +1131,12 @@
                 const ta = document.getElementById('clipboard-target');
                 ta.value = text;
                 ta.select();
-                document.execCommand('copy');
-                alert(`「${this.currentClass.name}」の記録をコピーしました！(番号順/2回分)`);
+                try {
+                    document.execCommand('copy');
+                    alert(`「${this.currentClass.name}」の記録をコピーしました！(番号順/2回分)`);
+                } catch(e) {
+                    alert("コピーに失敗しました。端末の設定を確認してください。");
+                }
             }
 
             // Input Handling (Common)
@@ -1212,6 +1252,7 @@
                 this.drawButton(20, btnY, btnW, 30, "タイム順", this.sortMode === 'TIME' ? "#007AFF" : "#ccc", () => { 
                     this.sortMode = 'TIME'; this.renderViewList(); 
                 });
+                // バグ修正: Y座標の引数を btnW から btnY へ変更
                 this.drawButton(20 + btnW + 20, btnY, btnW, 30, "出席番号順", this.sortMode === 'ID' ? "#007AFF" : "#ccc", () => { 
                     this.sortMode = 'ID'; this.renderViewList(); 
                 });
