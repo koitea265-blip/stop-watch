@@ -223,7 +223,7 @@
                     const saved = localStorage.getItem(this.STORAGE_KEY);
                     if (saved) {
                         const data = JSON.parse(saved);
-                        if (data && Array.isArray(data.classes)) {
+                        if (data && Array.isArray(data.classes) && data.classes.length > 0) {
                             this.classes = data.classes;
                             this.classes.forEach(c => {
                                 if (!c.records) c.records = [];
@@ -321,7 +321,7 @@
                 this.classes.push({ name: className, students: students, records: [] });
                 this.clearInputFields();
                 this.updateRegisteredClassesList(); 
-                this.saveDataToStorage(); // ここは即時保存で良い
+                this.saveDataToStorage(); 
                 alert(`「${className}」を追加しました`);
             }
             
@@ -330,7 +330,6 @@
                 div.innerText = (this.classes && this.classes.length > 0) ? this.classes.map(c => c.name).join(', ') : "なし";
             }
 
-            // ★ 修正: 保存処理の非同期化・デバウンス
             saveDataToStorage(immediate = false) {
                  if (this.saveTimer) clearTimeout(this.saveTimer);
                  
@@ -349,13 +348,20 @@
                  if (immediate) {
                      executeSave();
                  } else {
-                     this.saveTimer = setTimeout(executeSave, 1000); // 1秒間操作がなければ保存
+                     this.saveTimer = setTimeout(executeSave, 1000); 
                  }
             }
 
+            // ★ 修正: 計測画面に入る際の状態を初期化（タイムを強制的に0にする）
             startApp() {
                 if (this.classes.length === 0) { alert("クラスを登録してください。"); return; }
                 if (this.currentClassIdx < 0) this.currentClassIdx = 0;
+
+                // タイムと動作状態、セッションをリセット
+                this.isRunning = false;
+                this.elapsedTime = 0;
+                this.sessionRecords = [];
+
                 this.updateClassSelector();
                 document.getElementById('gender-selector').value = this.filterGender;
                 document.getElementById('attempt' + this.currentAttempt).checked = true;
@@ -399,7 +405,7 @@
                     this.sessionRecords = [];
                 }
                 document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false);
-                this.saveDataToStorage(true); // リセット時は即時保存
+                this.saveDataToStorage(true); 
             }
 
             openResetAllModal() {
@@ -478,7 +484,7 @@
                     this.sessionRecords[index].studentId = id;
                     this.sessionRecords[index].studentName = s ? s.name : "(未選択)";
                     this.updateSelectOptions();
-                    this.saveDataToStorage(); // 名前の紐付け変更を予約保存
+                    this.saveDataToStorage(); 
                 };
                 div.appendChild(select); container.appendChild(div);
             }
@@ -583,7 +589,7 @@
                     if (c) c.records = (c.records || []).concat(v); 
                     this.sessionRecords = []; 
                 } 
-                this.saveDataToStorage(true); // 画面遷移時は強制保存
+                this.saveDataToStorage(true); 
                 this.loadDataAndGoView(); 
             }
             
