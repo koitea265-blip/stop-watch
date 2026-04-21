@@ -386,7 +386,7 @@
                 listContainer.style.display = 'flex'; listContainer.style.top = '360px'; listContainer.style.bottom = '85px';
                 listContainer.classList.remove('compact-mode'); 
                 
-                document.getElementById('record-list-container').innerHTML = ""; // 初期化時のみ全消去
+                document.getElementById('record-list-container').innerHTML = ""; 
                 this.renderRecordList(false); 
             }
 
@@ -455,7 +455,7 @@
             changeGenderFilter(val) {
                 this.filterGender = val;
                 if (this.state === 'RECORD') {
-                    document.getElementById('record-list-container').innerHTML = ""; // フィルタ変更は全再構築
+                    document.getElementById('record-list-container').innerHTML = ""; 
                     this.renderRecordList(false);
                 } else if (this.state === 'VIEW') {
                     this.renderViewList();
@@ -466,7 +466,7 @@
                 this.currentAttempt = parseInt(val);
                 document.getElementById('attempt' + val).checked = true;
                 if (this.state === 'RECORD') {
-                    document.getElementById('record-list-container').innerHTML = ""; // 回数変更も全再構築
+                    document.getElementById('record-list-container').innerHTML = ""; 
                     this.renderRecordList(false);
                 }
             }
@@ -482,13 +482,16 @@
                     this.sessionRecords = [];
                 } else {
                     if (this.currentClass && this.sessionRecords.length > 0) {
-                        this.currentClass.records = this.currentClass.records.concat(this.sessionRecords);
+                        const validRecords = this.sessionRecords.filter(r => r.studentId !== 9999);
+                        if (validRecords.length > 0) {
+                            this.currentClass.records = (this.currentClass.records || []).concat(validRecords);
+                        }
                     }
                     this.sessionRecords = [];
                 }
 
                 if(this.state === 'RECORD') {
-                    document.getElementById('record-list-container').innerHTML = ""; // リセット時は全再構築
+                    document.getElementById('record-list-container').innerHTML = ""; 
                     this.renderRecordList(false);
                 }
                 this.saveDataToStorage();
@@ -529,7 +532,6 @@
                 this.renderRecordList(false);
             }
             
-            // ★致命的欠陥の修正：DOMを全破壊せず、不足分のみを追加する方式
             renderRecordList(autoScroll = false) {
                 const container = document.getElementById('record-list-container');
                 if (!container) return; 
@@ -538,17 +540,14 @@
                 const existingRows = container.children;
                 const dataCount = this.sessionRecords.length;
 
-                // 余分なDOMは削除（通常発生しない）
                 while (existingRows.length > dataCount) {
                     container.removeChild(container.lastChild);
                 }
 
-                // 足りない行だけをDOMに追加（既存の行は破壊されない）
                 for (let i = existingRows.length; i < dataCount; i++) {
                     this.addRecordRowToDOM(this.sessionRecords[i], i);
                 }
 
-                // 各行のテキスト（順位・タイム）の整合性確保
                 Array.from(container.children).forEach((div, i) => {
                     const rec = this.sessionRecords[i];
                     const attemptLabel = rec.attempt === 1 ? "①" : "②";
@@ -556,14 +555,12 @@
                     div.querySelector('.record-time').innerText = rec.timeStr;
                 });
 
-                // ★選択肢の有効化・無効化だけを更新（DOM再構築はしない）
                 this.updateSelectOptions();
                 
                 if (autoScroll) container.scrollTop = container.scrollHeight;
                 else container.scrollTop = prevScrollTop;
             }
 
-            // 行を追加するだけの処理（フィルタ除外・重複除外ロジックは分離）
             addRecordRowToDOM(record, index) {
                 const container = document.getElementById('record-list-container');
                 const div = document.createElement('div');
@@ -571,10 +568,7 @@
                 
                 const infoDiv = document.createElement('div');
                 infoDiv.className = 'record-info';
-                infoDiv.innerHTML = `
-                    <span class="record-rank"></span>
-                    <span class="record-time"></span>
-                `;
+                infoDiv.innerHTML = `<span class="record-rank"></span><span class="record-time"></span>`;
                 
                 const select = document.createElement('select');
                 select.className = 'record-select';
@@ -584,10 +578,20 @@
                 if (record.studentId == 9999) defOpt.selected = true;
                 select.appendChild(defOpt);
 
+                // ★今回の試技ですでに保存済みの生徒IDを取得
+                const pastAttemptUsedIds = new Set(
+                    (this.currentClass.records || [])
+                        .filter(r => r.attempt === this.currentAttempt)
+                        .map(r => parseInt(r.studentId))
+                );
+
                 const students = this.currentClass.students || [];
                 students.forEach(s => {
-                    // 全体フィルタにかかる生徒はそもそも選択肢に作らない
                     if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) return;
+
+                    // ★重要：過去の計測データにある生徒はプルダウンに表示しない
+                    // ただし、現在この行で選択されている生徒自身は表示を維持する（表示が消えるのを防ぐ）
+                    if (pastAttemptUsedIds.has(s.id) && s.id !== parseInt(record.studentId)) return;
 
                     const opt = document.createElement('option');
                     opt.value = s.id;
@@ -606,35 +610,28 @@
                     }
                     this.sessionRecords[index].studentId = newId;
                     this.sessionRecords[index].studentName = studentName;
-                    
-                    // DOMを維持したまま、他のプルダウンの無効状態だけを更新
                     this.updateSelectOptions();
                 };
 
                 div.appendChild(infoDiv); div.appendChild(select); container.appendChild(div);
             }
 
-            // ★DOMを破壊せずに <option> の disabled 属性だけを書き換える
             updateSelectOptions() {
+                // 現在のリスト内（まだ保存していないセッション内）で選ばれているIDを取得
                 const sessionUsedIds = new Set(
                     this.sessionRecords.map(r => parseInt(r.studentId)).filter(id => id !== 9999)
                 );
-                const pastRecords = this.currentClass.records || [];
-                const pastAttemptUsedIds = new Set(
-                    pastRecords.filter(r => r.attempt === this.currentAttempt)
-                               .map(r => parseInt(r.studentId)).filter(id => id !== 9999)
-                );
-                const disabledIds = new Set([...sessionUsedIds, ...pastAttemptUsedIds]);
 
                 const selects = document.querySelectorAll('.record-select');
-                selects.forEach(select => {
-                    const currentSelectedId = parseInt(select.value);
+                selects.forEach((select, heatIdx) => {
+                    const currentSelectedIdForThisHeat = parseInt(select.value);
+                    
                     Array.from(select.options).forEach(opt => {
                         const optId = parseInt(opt.value);
                         if (optId === 9999) return;
                         
-                        // 他の行で選ばれたID、または過去の同試技で選ばれたIDは無効化
-                        if (disabledIds.has(optId) && optId !== currentSelectedId) {
+                        // 同じレース（セッション）内の他の行で選ばれている場合はグレーアウト
+                        if (sessionUsedIds.has(optId) && optId !== currentSelectedIdForThisHeat) {
                             opt.disabled = true;
                             opt.style.color = '#ccc';
                         } else {
@@ -684,7 +681,8 @@
 
             saveAndGoView() {
                 if (this.sessionRecords.length > 0) {
-                    this.currentClass.records = (this.currentClass.records || []).concat(this.sessionRecords);
+                    const validRecords = this.sessionRecords.filter(r => r.studentId !== 9999);
+                    this.currentClass.records = (this.currentClass.records || []).concat(validRecords);
                     this.sessionRecords = [];
                 }
                 this.saveDataToStorage(); 
