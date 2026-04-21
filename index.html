@@ -10,7 +10,7 @@
 
     <title>Canvasストップウォッチ</title>
     <style>
-        /* 画面全体の固定設定 */
+        /* レイアウト固定：スクロールとズームを物理的に封印 */
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
             background-color: #333; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -19,7 +19,7 @@
         }
         #app-container {
             position: relative; width: 100%; max-width: 480px; height: 100%;
-            background-color: #f2f2f7; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5); touch-action: none; 
+            background-color: #f2f2f7; overflow: hidden; box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         canvas { display: block; width: 100%; height: 100%; touch-action: none; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -32,10 +32,10 @@
         }
 
         .app-title { font-size: 28px; font-weight: bold; color: #333; text-align: center; margin: 10px 0 15px 0; line-height: 1.2; letter-spacing: 0.02em; white-space: nowrap; }
-        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
-        #reg-student-list { height: 200px !important; min-height: 200px !important; flex-shrink: 0; font-family: monospace; line-height: 1.4; resize: vertical; }
+        input, textarea, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 16px; -webkit-appearance: none; }
+        #reg-student-list { height: 180px !important; min-height: 180px !important; flex-shrink: 0; font-family: monospace; line-height: 1.4; resize: none; }
 
-        .html-btn { padding: 12px; background: #007AFF; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; text-align: center; width: 100%; touch-action: manipulation; }
+        .html-btn { padding: 14px; background: #007AFF; color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; text-align: center; width: 100%; touch-action: manipulation; }
         .btn-outline { background: #fff; color: #007AFF; border: 1px solid #007AFF; }
         .btn-green { background: #34C759; color: white; }
         .btn-danger { background: #FF3B30; color: white; }
@@ -45,16 +45,15 @@
 
         #header-controls {
             pointer-events: auto; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            width: 90%; display: none; z-index: 100; background: rgba(255,255,255,0.9); padding: 10px;
+            width: 92%; display: none; z-index: 100; background: rgba(255,255,255,0.92); padding: 10px;
             border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); box-sizing: border-box;
         }
-        .control-row { display: flex; gap: 10px; margin-bottom: 8px; }
-        .control-row:last-child { margin-bottom: 0; }
-        #class-selector { flex: 2; padding: 8px; font-weight: bold; }
-        #gender-selector { flex: 1; padding: 8px; }
+        .control-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        #class-selector { flex: 2; font-weight: bold; }
+        #gender-selector { flex: 1; }
 
         .radio-group { display: flex; justify-content: space-around; width: 100%; background: #eee; border-radius: 8px; padding: 4px; }
-        .radio-label { flex: 1; text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; color: #555; transition: 0.2s; }
+        .radio-label { flex: 1; text-align: center; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; color: #555; transition: 0.15s; }
         .radio-input { display: none; }
         .radio-input:checked + .radio-label { background: #007AFF; color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
@@ -64,39 +63,35 @@
             display: none; flex-direction: column; gap: 6px; padding-bottom: 20px;
         }
         .record-row {
-            background: rgba(255, 255, 255, 0.9); border-radius: 8px; padding: 8px 10px; display: flex;
-            align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            animation: fadeIn 0.2s ease-out; min-height: 44px;
+            background: rgba(255, 255, 255, 0.95); border-radius: 8px; padding: 8px 10px; display: flex;
+            align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            animation: fadeIn 0.15s ease-out; min-height: 48px;
         }
-        #record-list-container.compact-mode { gap: 2px; }
-        #record-list-container.compact-mode .record-row { padding: 4px 10px; min-height: 28px; border-radius: 4px; }
-        #record-list-container.compact-mode .record-row div { font-size: 13px !important; }
-        #record-list-container.compact-mode .record-time { font-size: 15px !important; }
+        #record-list-container.compact-mode { gap: 4px; }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        .record-info { display: flex; flex-direction: column; flex-shrink: 0; margin-right: 15px; }
+        .record-info { display: flex; flex-direction: column; flex-shrink: 0; margin-right: 10px; }
         .record-rank { font-weight: bold; font-size: 13px; color: #888; }
-        .record-time { font-family: monospace; font-size: 18px; font-weight: bold; color: #333; }
-        .record-select { width: 180px; max-width: 55%; padding: 8px; font-size: 14px; background: #fff; border: 1px solid #ddd; border-radius: 6px; touch-action: pan-y; }
+        .record-time { font-family: monospace; font-size: 20px; font-weight: bold; color: #333; }
+        .record-select { width: 180px; max-width: 55%; padding: 8px; font-size: 15px; border: 1px solid #ddd; background: #fff; }
 
         #clipboard-target { position: absolute; top: -9999px; }
 
         #modal-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: none;
-            justify-content: center; align-items: center; z-index: 2000; pointer-events: auto; touch-action: none;
+            justify-content: center; align-items: center; z-index: 2000; pointer-events: auto;
         }
         #modal-box {
-            background: #fff; padding: 20px; border-radius: 12px; width: 85%; max-width: 350px; text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3); animation: popIn 0.2s ease-out; touch-action: auto;
+            background: #fff; padding: 24px; border-radius: 16px; width: 85%; max-width: 350px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); animation: popIn 0.2s cubic-bezier(0.17, 0.67, 0.83, 1);
         }
         @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .modal-buttons { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
-        .modal-desc { font-size: 12px; font-weight: normal; display: block; margin-top: 2px; opacity: 0.9; }
         
         #flash-message {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7);
-            color: white; padding: 15px 25px; border-radius: 10px; z-index: 3000; display: none; pointer-events: none; font-weight: bold;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85);
+            color: white; padding: 16px 24px; border-radius: 12px; z-index: 3000; display: none; font-weight: bold;
         }
     </style>
 </head>
@@ -107,14 +102,8 @@
             <div id="setup-panel">
                 <h1 class="app-title">体育ストップウォッチ</h1>
                 <h2 style="margin:0 0 10px 0; font-size:16px; text-align:center; color:#666;">クラス登録</h2>
-                <div style="font-size:12px; color:#666; line-height:1.4;">
-                    ①クラス名と名簿を入力して「追加」<br>
-                    ※ExcelやスプレッドシートからコピペOK<br>
-                    ※「番号 氏名 性別」の順だと自動認識します<br>
-                    （例: 1 山田太郎 男）
-                </div>
-                <input type="text" id="reg-class-name" placeholder="クラス名 (例: 6年1組)">
-                <textarea id="reg-student-list" placeholder="出席番号順に入力&#13;&#10;例1: 山田 太郎 男&#13;&#10;例2: 1 山田 太郎 男 (Excelから貼付)"></textarea>
+                <input type="text" id="reg-class-name" placeholder="クラス名 (例: 1年1組)">
+                <textarea id="reg-student-list" placeholder="名簿を貼り付け&#10;1 山田太郎 男&#10;2 佐藤花子 女"></textarea>
                 <div class="button-row">
                     <button id="btn-add-class" class="html-btn btn-green">リストに追加</button>
                     <button id="btn-export" class="html-btn btn-outline" style="background:#f0f8ff;">データ保存</button>
@@ -123,10 +112,9 @@
                 <div style="font-size:12px; margin-top:10px;">登録済みクラス:</div>
                 <div id="registered-classes-list">なし</div>
                 <hr style="width:100%; border:0; border-top:1px solid #ddd; margin:10px 0;">
-                <div style="font-size:12px; color:#666;">②登録が終わったら計測へ</div>
                 <button id="btn-start-app" class="html-btn">計測画面へ</button>
-                <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
-                    <button id="btn-reset-all" class="html-btn btn-danger" style="font-size: 13px; background-color: #FF3B30;">⚠ 全データ消去 (リセット)</button>
+                <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button id="btn-reset-all-trigger" class="html-btn btn-danger" style="font-size: 13px;">⚠ 全データ消去</button>
                 </div>
             </div>
             
@@ -157,54 +145,49 @@
         <div id="modal-overlay">
             <div id="modal-box">
                 <h3 id="modal-title" style="margin:0 0 10px 0; color:#333;">リセット操作</h3>
-                <p style="margin:0; font-size:14px; color:#666;" id="modal-message">操作を選択してください。</p>
+                <p style="margin:0; font-size:14px; color:#666;" id="modal-message"></p>
                 <div id="modal-options-default" class="modal-buttons" style="display:none;">
-                    <button id="btn-modal-next-race" class="html-btn btn-green">続けて計測する<span class="modal-desc">記録を保存して画面をリセット</span></button>
-                    <button id="btn-modal-clear-all" class="html-btn btn-danger">記録をクリアする<span class="modal-desc">このクラスの全データを消去</span></button>
+                    <button id="btn-modal-next-race" class="html-btn btn-green">続けて計測する</button>
+                    <button id="btn-modal-clear-all" class="html-btn btn-danger">記録をクリアする</button>
                     <button id="btn-modal-cancel" class="html-btn btn-outline">キャンセル</button>
                 </div>
                 <div id="modal-options-confirm" class="modal-buttons" style="display:none;">
-                    <p style="color:#FF3B30; font-weight:bold; margin:0;">本当に全消去しますか？<br>この操作は取り消せません。</p>
                     <button id="btn-modal-confirm-clear" class="html-btn btn-danger">はい、消去します</button>
                     <button id="btn-modal-confirm-cancel" class="html-btn btn-outline">キャンセル</button>
                 </div>
                 <div id="modal-options-reset-all" class="modal-buttons" style="display:none;">
-                    <p style="color:#FF3B30; font-weight:bold; margin:0; text-align:left;">
-                        保存されている全てのクラス・名簿・記録データを消去して初期化します。<br>この操作は取り消せません。<br><br>本当によろしいですか？
-                    </p>
-                    <button id="btn-modal-reset-all-confirm" class="html-btn btn-danger">全データを消去</button>
+                    <button id="btn-modal-reset-all-confirm" class="html-btn btn-danger">全データを完全に消去</button>
                     <button id="btn-modal-reset-all-cancel" class="html-btn btn-outline">キャンセル</button>
                 </div>
             </div>
         </div>
-        <div id="flash-message">タイマーをリセットしました</div>
+        <div id="flash-message"></div>
         <textarea id="clipboard-target"></textarea>
     </div>
 
     <script>
         class App {
             constructor() {
-                this.STORAGE_KEY = 'pe_stopwatch_canvas_data_v2';
+                this.STORAGE_KEY = 'pe_stopwatch_pro_v3'; // キーを刷新してクリーン開始
                 this.container = document.getElementById('app-container');
                 this.canvas = document.getElementById('gameCanvas');
                 this.ctx = this.canvas.getContext('2d');
                 
-                this.saveTimer = null;
                 this.wakeLock = null;
-                this.isRecovering = false;
+                this.needsSave = false;
 
                 this.resetInternalState();
                 this.resize();
                 window.addEventListener('resize', () => this.resize());
                 this.bindEvents();
+                
+                // データ復元
                 this.initStorage();
-                this.clearInputFields();
-
-                // ライフサイクル管理：バックグラウンド移行時の処理
+                
+                // ライフサイクル管理：バックグラウンド時のデータ保護
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') {
-                        this.saveDataToStorage(true);
-                        this.releaseWakeLock();
+                        this.saveDataToStorage(); // 強制即時保存
                     } else {
                         if (this.isRunning) this.requestWakeLock();
                     }
@@ -229,21 +212,14 @@
                 this.sortMode = 'TIME';
             }
 
-            // ★ スリープ防止
             async requestWakeLock() {
                 if ('wakeLock' in navigator) {
                     try {
                         this.wakeLock = await navigator.wakeLock.request('screen');
-                    } catch (err) {
-                        console.warn("WakeLock failed:", err);
-                    }
-                }
-            }
-
-            releaseWakeLock() {
-                if (this.wakeLock) {
-                    this.wakeLock.release();
-                    this.wakeLock = null;
+                        this.wakeLock.addEventListener('release', () => {
+                            if (this.isRunning && document.visibilityState === 'visible') this.requestWakeLock();
+                        });
+                    } catch (err) {}
                 }
             }
 
@@ -254,389 +230,310 @@
                         const data = JSON.parse(saved);
                         if (data && Array.isArray(data.classes)) {
                             this.classes = data.classes;
-                            this.classes.forEach(c => {
-                                if (!c.records) c.records = [];
-                                if (!c.students) c.students = [];
-                            });
-
-                            // UIリカバリ：突然の終了から元の画面に復帰
+                            // 復帰：最後に計測していた状態に戻す
                             if (data.uiState) {
-                                this.isRecovering = true;
                                 this.state = data.uiState.state || 'HOME';
                                 this.currentClassIdx = data.uiState.currentClassIdx;
                                 this.currentAttempt = data.uiState.currentAttempt;
                                 this.filterGender = data.uiState.filterGender;
                                 this.sessionRecords = data.uiState.sessionRecords || [];
-                                this.isRunning = data.uiState.isRunning || false;
                                 this.elapsedTime = data.uiState.elapsedTime || 0;
-                                if (this.isRunning) {
-                                    this.startTime = Date.now() - this.elapsedTime;
-                                }
-
+                                
                                 if (this.state === 'RECORD' && this.classes[this.currentClassIdx]) {
                                     this.startApp(true);
                                 } else if (this.state === 'VIEW') {
                                     this.loadDataAndGoView();
                                 }
-                                this.isRecovering = false;
                             }
                         }
                     }
-                } catch(e) {
-                    console.error("Recovery failed", e);
-                }
-                if (!this.isRecovering && this.state === 'HOME') this.currentClassIdx = -1;
+                } catch(e) { console.error("Restore failed", e); }
                 this.updateRegisteredClassesList();
             }
 
-            clearInputFields() {
-                document.getElementById('reg-class-name').value = "";
-                document.getElementById('reg-student-list').value = "";
+            saveDataToStorage() {
+                try {
+                    const data = {
+                        classes: this.classes,
+                        uiState: {
+                            state: this.state,
+                            currentClassIdx: this.currentClassIdx,
+                            currentAttempt: this.currentAttempt,
+                            filterGender: this.filterGender,
+                            sessionRecords: this.sessionRecords,
+                            elapsedTime: this.elapsedTime
+                        }
+                    };
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+                    this.needsSave = false;
+                } catch(e) { console.warn("Save failed - Storage full?"); }
             }
 
             bindEvents() {
                 const c = this.canvas;
-                c.addEventListener('mousedown', (e) => this.handleInputStart(e.clientX, e.clientY));
-                c.addEventListener('touchstart', (e) => {
+                const start = (ex, ey) => {
+                    const rect = this.container.getBoundingClientRect();
+                    this.handleInputStart(ex - rect.left, ey - rect.top);
+                };
+                c.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+                c.addEventListener('touchstart', e => {
                     if(e.cancelable) e.preventDefault();
-                    if(e.touches && e.touches.length > 0) this.handleInputStart(e.touches[0].clientX, e.touches[0].clientY);
+                    if(e.touches[0]) start(e.touches[0].clientX, e.touches[0].clientY);
                 }, {passive: false});
+                c.addEventListener('mouseup', () => this.handleInputEnd());
+                c.addEventListener('touchend', () => this.handleInputEnd());
 
-                c.addEventListener('mousemove', (e) => this.handleInputMove(e.clientX, e.clientY));
-                c.addEventListener('touchmove', (e) => {
-                    if(e.cancelable) e.preventDefault();
-                    if(e.touches && e.touches.length > 0) this.handleInputMove(e.touches[0].clientX, e.touches[0].clientY);
-                }, {passive: false});
-
-                c.addEventListener('mouseup', (e) => this.handleInputEnd(e.clientX, e.clientY));
-                c.addEventListener('touchend', (e) => {
-                    if(e.cancelable) e.preventDefault();
-                    if(e.changedTouches && e.changedTouches.length > 0) this.handleInputEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-                }, {passive: false});
-
-                document.getElementById('btn-add-class').addEventListener('click', () => this.addClass());
-                document.getElementById('btn-export').addEventListener('click', () => this.exportData());
-                document.getElementById('btn-import').addEventListener('click', () => this.importData());
-                document.getElementById('file-input').addEventListener('change', (e) => this.handleFileSelect(e));
-                document.getElementById('btn-start-app').addEventListener('click', () => this.startApp());
-                document.getElementById('btn-reset-all').addEventListener('click', () => this.openResetAllModal());
-                document.getElementById('class-selector').addEventListener('change', (e) => this.changeClass(e.target.value));
-                document.getElementById('gender-selector').addEventListener('change', (e) => this.changeGenderFilter(e.target.value));
-                document.getElementById('btn-modal-next-race').addEventListener('click', () => this.execReset(false));
-                document.getElementById('btn-modal-clear-all').addEventListener('click', () => this.showClearConfirm());
-                document.getElementById('btn-modal-cancel').addEventListener('click', () => this.closeModal());
-                document.getElementById('btn-modal-confirm-clear').addEventListener('click', () => this.execReset(true));
-                document.getElementById('btn-modal-confirm-cancel').addEventListener('click', () => this.closeModal());
-                document.getElementById('btn-modal-reset-all-confirm').addEventListener('click', () => this.execResetAllData());
-                document.getElementById('btn-modal-reset-all-cancel').addEventListener('click', () => this.closeModal());
-            }
-
-            get currentClass() {
-                if (this.currentClassIdx < 0 || this.currentClassIdx >= this.classes.length) return null;
-                return this.classes[this.currentClassIdx];
-            }
-
-            isAllMeasured() {
-                const c = this.currentClass;
-                if (!c) return false;
-                const targets = c.students.filter(s => this.filterGender === 'ALL' || s.gender === this.filterGender);
-                if (targets.length === 0) return false;
-                const measuredIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => parseInt(r.studentId)));
-                return targets.every(s => measuredIds.has(s.id));
+                document.getElementById('btn-add-class').onclick = () => this.addClass();
+                document.getElementById('btn-export').onclick = () => this.exportData();
+                document.getElementById('btn-import').onclick = () => document.getElementById('file-input').click();
+                document.getElementById('file-input').onchange = e => this.handleFileSelect(e);
+                document.getElementById('btn-start-app').onclick = () => this.startApp();
+                document.getElementById('btn-reset-all-trigger').onclick = () => this.openResetAllModal();
+                document.getElementById('class-selector').onchange = e => this.changeClass(e.target.value);
+                document.getElementById('gender-selector').onchange = e => this.changeGenderFilter(e.target.value);
+                
+                document.getElementById('btn-modal-next-race').onclick = () => this.execReset(false);
+                document.getElementById('btn-modal-clear-all').onclick = () => this.showClearConfirm();
+                document.getElementById('btn-modal-cancel').onclick = () => this.closeModal();
+                document.getElementById('btn-modal-confirm-clear').onclick = () => this.execReset(true);
+                document.getElementById('btn-modal-confirm-cancel').onclick = () => this.closeModal();
+                document.getElementById('btn-modal-reset-all-confirm').onclick = () => this.execResetAllData();
+                document.getElementById('btn-modal-reset-all-cancel').onclick = () => this.closeModal();
             }
 
             resize() {
                 const rect = this.container.getBoundingClientRect();
                 this.canvas.width = rect.width; this.canvas.height = rect.height;
-                this.width = this.canvas.width; this.height = this.canvas.height;
+                this.width = rect.width; this.height = rect.height;
             }
 
             addClass() {
-                const nameInput = document.getElementById('reg-class-name');
-                const listInput = document.getElementById('reg-student-list');
-                const className = nameInput.value.trim();
-                const listText = listInput.value.trim();
-                if (!className || !listText) { alert("クラス名と名簿を入力してください"); return; }
-                const students = listText.split('\n').map((line, idx) => {
-                    let l = line.trim(); if(!l) return null;
-                    let gender = 'O'; 
-                    let parts = l.split(/[\t\s　]+/); parts = parts.filter(p => p);
-                    if (parts.length === 0) return null;
-                    const last = parts[parts.length - 1];
-                    if (['男','M','m','boy','Boy','男子'].includes(last)) { gender = 'M'; parts.pop(); } 
-                    else if (['女','F','f','girl','Girl','女子'].includes(last)) { gender = 'F'; parts.pop(); }
-                    if (parts.length > 0 && /^\d+[\.\:．：]?$/.test(parts[0])) { parts.shift(); }
-                    let name = parts.join(' '); if (!name) { name = l; }
-                    return { id: idx + 1, name: name, gender: gender };
-                }).filter(s => s !== null);
-                this.classes.push({ name: className, students: students, records: [] });
-                this.clearInputFields();
-                this.updateRegisteredClassesList(); 
-                this.saveDataToStorage(true); 
-                alert(`「${className}」を追加しました`);
-            }
-            
-            updateRegisteredClassesList() {
-                const div = document.getElementById('registered-classes-list');
-                div.innerText = (this.classes && this.classes.length > 0) ? this.classes.map(c => c.name).join(', ') : "なし";
+                const name = document.getElementById('reg-class-name').value.trim();
+                const list = document.getElementById('reg-student-list').value.trim();
+                if (!name || !list) return;
+                const students = list.split('\n').map((l, i) => {
+                    let parts = l.trim().split(/[\s　]+/);
+                    if (parts.length < 1) return null;
+                    let gender = 'O', n = parts.join(' ');
+                    const last = parts[parts.length-1];
+                    if (['男','M','男子'].includes(last)) { gender='M'; parts.pop(); }
+                    else if (['女','F','女子'].includes(last)) { gender='F'; parts.pop(); }
+                    if (parts.length > 0 && /^\d+/.test(parts[0])) parts.shift();
+                    n = parts.join(' ') || l;
+                    return { id: i+1, name: n, gender };
+                }).filter(s => s);
+                this.classes.push({ name, students, records: [] });
+                this.updateRegisteredClassesList();
+                this.saveDataToStorage();
+                document.getElementById('reg-class-name').value = "";
+                document.getElementById('reg-student-list').value = "";
             }
 
-            saveDataToStorage(immediate = false) {
-                 if (this.saveTimer) clearTimeout(this.saveTimer);
-                 const executeSave = () => {
-                     try {
-                         if (this.classes.length === 0) {
-                             localStorage.removeItem(this.STORAGE_KEY);
-                         } else {
-                             const dataToSave = {
-                                 classes: this.classes,
-                                 uiState: {
-                                     state: this.state,
-                                     currentClassIdx: this.currentClassIdx,
-                                     currentAttempt: this.currentAttempt,
-                                     filterGender: this.filterGender,
-                                     sessionRecords: this.sessionRecords,
-                                     isRunning: this.isRunning,
-                                     elapsedTime: this.elapsedTime
-                                 }
-                             };
-                             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dataToSave));
-                         }
-                     } catch(e) {}
-                 };
-                 if (immediate) executeSave();
-                 else this.saveTimer = setTimeout(executeSave, 800); 
+            updateRegisteredClassesList() {
+                document.getElementById('registered-classes-list').innerText = this.classes.length ? this.classes.map(c => c.name).join(', ') : "なし";
             }
 
             startApp(isRecovery = false) {
-                if (this.classes.length === 0) { alert("クラスを登録してください。"); return; }
+                if (!this.classes.length) return;
                 if (this.currentClassIdx < 0) this.currentClassIdx = 0;
-
-                if (!isRecovery) {
-                    this.isRunning = false;
-                    this.elapsedTime = 0;
-                    this.sessionRecords = [];
-                }
-
-                this.updateClassSelector();
-                document.getElementById('gender-selector').value = this.filterGender;
-                document.getElementById('attempt' + this.currentAttempt).checked = true;
+                if (!isRecovery) { this.isRunning = false; this.elapsedTime = 0; this.sessionRecords = []; }
                 this.state = 'RECORD';
+                this.updateClassSelector();
                 document.getElementById('setup-panel').style.display = 'none';
                 document.getElementById('header-controls').style.display = 'block';
-                const listContainer = document.getElementById('record-list-container');
-                listContainer.style.display = 'flex'; listContainer.style.top = '360px'; listContainer.style.bottom = '85px';
-                listContainer.classList.remove('compact-mode'); 
-                listContainer.innerHTML = ""; 
-                this.renderRecordList(false); 
-                this.saveDataToStorage(true);
+                const list = document.getElementById('record-list-container');
+                list.style.display = 'flex'; list.style.top = '360px'; list.style.bottom = '85px';
+                list.classList.remove('compact-mode'); list.innerHTML = "";
+                this.renderRecordList();
             }
 
             updateClassSelector() {
                 const sel = document.getElementById('class-selector'); sel.innerHTML = "";
-                if (!this.classes || this.classes.length === 0) return;
-                this.classes.forEach((c, idx) => {
-                    const opt = document.createElement('option'); opt.value = idx; opt.innerText = c.name;
-                    if(idx === this.currentClassIdx) opt.selected = true;
+                this.classes.forEach((c, i) => {
+                    const opt = document.createElement('option'); opt.value = i; opt.innerText = c.name;
+                    if(i === this.currentClassIdx) opt.selected = true;
                     sel.appendChild(opt);
                 });
             }
 
-            changeClass(idx) { 
-                this.currentClassIdx = parseInt(idx); 
-                this.isRunning = false;
-                this.elapsedTime = 0;
-                this.sessionRecords = []; 
-                this.startApp(); 
-            }
-            changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); this.saveDataToStorage(); }
-            changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false); this.saveDataToStorage(); }
+            changeClass(idx) { this.currentClassIdx = parseInt(idx); this.elapsedTime = 0; this.sessionRecords = []; this.startApp(); }
+            changeGenderFilter(val) { this.filterGender = val; document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(); }
+            changeAttempt(val) { this.currentAttempt = parseInt(val); document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(); }
 
             toggleTimer() {
-                if (this.isRunning) {
-                    this.isRunning = false;
-                    this.releaseWakeLock();
-                } else {
-                    if (this.isAllMeasured()) return;
-                    this.startTime = Date.now() - this.elapsedTime;
-                    this.isRunning = true;
+                if (this.isRunning) { this.isRunning = false; }
+                else {
+                    const targets = this.classes[this.currentClassIdx].students.filter(s => this.filterGender === 'ALL' || s.gender === this.filterGender);
+                    const doneIds = new Set(this.classes[this.currentClassIdx].records.filter(r => r.attempt === this.currentAttempt).map(r => r.studentId));
+                    if (targets.every(s => doneIds.has(s.id))) return;
+                    this.startTime = Date.now() - this.elapsedTime; this.isRunning = true;
                     this.requestWakeLock();
                 }
-                this.saveDataToStorage(true);
-            }
-
-            resetTimer(forceClearAll = false) {
-                this.isRunning = false; this.elapsedTime = 0;
-                this.releaseWakeLock();
-                const c = this.currentClass;
-                if (forceClearAll) { if (c) c.records = []; this.sessionRecords = []; } 
-                else {
-                    if (c && this.sessionRecords.length > 0) {
-                        const valid = this.sessionRecords.filter(r => r.studentId !== 9999);
-                        if (valid.length > 0) c.records = (c.records || []).concat(valid);
-                    }
-                    this.sessionRecords = [];
-                }
-                document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList(false);
-                this.saveDataToStorage(true); 
-            }
-
-            openResetAllModal() {
-                document.getElementById('modal-options-default').style.display = 'none';
-                document.getElementById('modal-options-confirm').style.display = 'none';
-                document.getElementById('modal-options-reset-all').style.display = 'flex';
-                document.getElementById('modal-overlay').style.display = 'flex';
-            }
-
-            execResetAllData() { 
-                try { localStorage.removeItem(this.STORAGE_KEY); } catch(e) {} 
-                this.resetInternalState();
-                this.clearInputFields();
-                const regList = document.getElementById('registered-classes-list');
-                if (regList) regList.innerText = "なし";
-                const classSelector = document.getElementById('class-selector');
-                if (classSelector) classSelector.innerHTML = "";
-                const recContainer = document.getElementById('record-list-container');
-                if (recContainer) recContainer.innerHTML = "";
-                this.goHome();
-                this.closeModal(); 
-            }
-
-            goHome() { 
-                this.state = 'HOME'; this.isRunning = false; this.elapsedTime = 0;
-                this.releaseWakeLock();
-                this.clearInputFields();
-                document.getElementById('setup-panel').style.display = 'flex'; 
-                document.getElementById('header-controls').style.display = 'none'; 
-                document.getElementById('record-list-container').style.display = 'none'; 
-                this.saveDataToStorage(true);
             }
 
             recordLap() {
-                const currentMs = this.isRunning ? (Date.now() - this.startTime) : this.elapsedTime;
-                if (currentMs === 0) return;
-                this.sessionRecords.push({ rank: this.sessionRecords.length + 1, attempt: this.currentAttempt, studentId: 9999, studentName: "(未選択)", timeMs: currentMs, timeStr: this.formatTime(currentMs) });
-                this.renderRecordList(false);
-                this.saveDataToStorage(); 
+                const now = this.isRunning ? (Date.now() - this.startTime) : this.elapsedTime;
+                if (now === 0) return;
+                this.sessionRecords.push({ rank: this.sessionRecords.length + 1, attempt: this.currentAttempt, studentId: 9999, timeMs: now, timeStr: this.formatTime(now) });
+                this.renderRecordList();
             }
-            
-            renderRecordList(autoScroll = false) {
+
+            renderRecordList() {
                 const container = document.getElementById('record-list-container');
-                if (!container || this.state !== 'RECORD') return; 
-                const prevScrollTop = container.scrollTop;
+                if (!container || this.state !== 'RECORD') return;
                 while (container.children.length > this.sessionRecords.length) container.removeChild(container.lastChild);
-                for (let i = container.children.length; i < this.sessionRecords.length; i++) this.addRecordRowToDOM(this.sessionRecords[i], i);
-                Array.from(container.children).forEach((div, i) => {
-                    const rec = this.sessionRecords[i];
-                    div.querySelector('.record-rank').innerText = `${rec.attempt === 1 ? "①" : "②"} ${rec.rank}位`;
+                this.sessionRecords.forEach((rec, i) => {
+                    let div = container.children[i];
+                    if (!div) {
+                        div = document.createElement('div'); div.className = 'record-row';
+                        div.innerHTML = `<div class="record-info"><span class="record-rank"></span><span class="record-time"></span></div><select class="record-select"></select>`;
+                        container.appendChild(div);
+                    }
+                    div.querySelector('.record-rank').innerText = `${rec.attempt===1?'①':'②'} ${rec.rank}位`;
                     div.querySelector('.record-time').innerText = rec.timeStr;
+                    this.setupSelect(div.querySelector('.record-select'), rec, i);
                 });
-                this.updateSelectOptions();
-                if (autoScroll) container.scrollTop = container.scrollHeight; else container.scrollTop = prevScrollTop;
+                container.scrollTop = container.scrollHeight;
             }
 
-            addRecordRowToDOM(record, index) {
-                const container = document.getElementById('record-list-container');
-                const div = document.createElement('div'); div.className = 'record-row';
-                div.innerHTML = `<div class="record-info"><span class="record-rank"></span><span class="record-time"></span></div>`;
-                const select = document.createElement('select'); select.className = 'record-select';
-                select.onchange = (e) => {
+            setupSelect(select, rec, sessionIdx) {
+                const c = this.classes[this.currentClassIdx];
+                const pastIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => r.studentId));
+                const currentIds = new Set(this.sessionRecords.map(r => r.studentId).filter(id => id !== 9999));
+                let h = `<option value="9999" ${rec.studentId===9999?'selected':''}>選択</option>`;
+                c.students.forEach(s => {
+                    if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) return;
+                    if (pastIds.has(s.id) && s.id !== rec.studentId) return;
+                    const used = currentIds.has(s.id) && s.id !== rec.studentId;
+                    h += `<option value="${s.id}" ${s.id===rec.studentId?'selected':''} ${used?'disabled':''}>${s.id}. ${s.name}</option>`;
+                });
+                if (select.innerHTML !== h) select.innerHTML = h;
+                select.onchange = e => {
                     const id = parseInt(e.target.value);
-                    const c = this.currentClass;
-                    if (!c) return;
-                    const s = c.students.find(stu => stu.id === id);
-                    this.sessionRecords[index].studentId = id;
-                    this.sessionRecords[index].studentName = s ? s.name : "(未選択)";
-                    this.updateSelectOptions();
-                    this.saveDataToStorage(); 
+                    this.sessionRecords[sessionIdx].studentId = id;
+                    this.renderRecordList();
                 };
-                div.appendChild(select); container.appendChild(div);
             }
 
-            updateSelectOptions() {
-                const c = this.currentClass; if (!c) return;
-                const pastIds = new Set(c.records.filter(r => r.attempt === this.currentAttempt).map(r => parseInt(r.studentId)));
-                const currentIds = new Set(this.sessionRecords.map(r => parseInt(r.studentId)).filter(id => id !== 9999));
-                const selects = document.querySelectorAll('.record-select');
-                selects.forEach((select, idx) => {
-                    const curId = parseInt(this.sessionRecords[idx].studentId);
-                    let h = `<option value="9999" ${curId === 9999 ? 'selected' : ''}>(選択)</option>`;
-                    c.students.forEach(s => {
-                        if (this.filterGender !== 'ALL' && s.gender !== this.filterGender) return;
-                        if (pastIds.has(s.id) && s.id !== curId) return;
-                        const isUsed = currentIds.has(s.id) && s.id !== curId;
-                        h += `<option value="${s.id}" ${s.id === curId ? 'selected' : ''} ${isUsed ? 'disabled style="color:#ccc"' : ''}>${s.id}. ${s.name} ${s.gender==='M'?'(男)':'(女)'}</option>`;
+            execReset(clear) {
+                if (clear) { this.classes[this.currentClassIdx].records = []; }
+                else {
+                    const valid = this.sessionRecords.filter(r => r.studentId !== 9999).map(r => {
+                        const s = this.classes[this.currentClassIdx].students.find(st => st.id === r.studentId);
+                        return { ...r, studentName: s ? s.name : "不明" };
                     });
-                    if (select.innerHTML !== h) select.innerHTML = h;
+                    this.classes[this.currentClassIdx].records = this.classes[this.currentClassIdx].records.concat(valid);
+                }
+                this.isRunning = false; this.elapsedTime = 0; this.sessionRecords = [];
+                document.getElementById('record-list-container').innerHTML = ""; this.renderRecordList();
+                this.saveDataToStorage(true); this.closeModal();
+            }
+
+            openResetAllModal() {
+                const m = document.getElementById('modal-message'); m.innerText = "すべてのクラス、名簿、記録を消去します。";
+                this.showModal('modal-options-reset-all');
+            }
+
+            execResetAllData() { localStorage.removeItem(this.STORAGE_KEY); this.resetInternalState(); this.goHome(); this.closeModal(); }
+            goHome() { this.state = 'HOME'; this.isRunning = false; document.getElementById('setup-panel').style.display = 'flex'; document.getElementById('header-controls').style.display = 'none'; document.getElementById('record-list-container').style.display = 'none'; this.updateRegisteredClassesList(); }
+            
+            showModal(id) {
+                document.getElementById('modal-options-default').style.display = 'none';
+                document.getElementById('modal-options-confirm').style.display = 'none';
+                document.getElementById('modal-options-reset-all').style.display = 'none';
+                document.getElementById(id).style.display = 'flex';
+                document.getElementById('modal-overlay').style.display = 'flex';
+            }
+            closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+            openResetModal() { 
+                document.getElementById('modal-message').innerText = "現在の記録を保存してリセットしますか？";
+                this.showModal('modal-options-default'); 
+            }
+            showClearConfirm() { 
+                document.getElementById('modal-message').innerText = "このクラスの全記録を消去しますか？";
+                this.showModal('modal-options-confirm'); 
+            }
+
+            loadDataAndGoView() { this.state = 'VIEW'; document.getElementById('setup-panel').style.display = 'none'; document.getElementById('header-controls').style.display = 'none'; const list = document.getElementById('record-list-container'); list.style.display = 'flex'; list.style.top = '100px'; list.style.bottom = '90px'; list.classList.add('compact-mode'); this.renderViewList(); }
+            renderViewList() {
+                const container = document.getElementById('record-list-container'); container.innerHTML = "";
+                const c = this.classes[this.currentClassIdx]; if (!c) return;
+                let sorted = [...c.records];
+                if (this.sortMode === 'TIME') sorted.sort((a,b) => a.timeMs - b.timeMs); else sorted.sort((a,b) => a.studentId - b.studentId);
+                if (this.filterGender !== 'ALL') sorted = sorted.filter(r => { const s = c.students.find(st => st.id === r.studentId); return s && s.gender === this.filterGender; });
+                sorted.forEach((r, i) => {
+                    const div = document.createElement('div'); div.className = 'record-row';
+                    div.innerHTML = `<div style="display:flex;width:100%;align-items:center;"><div style="font-weight:bold;color:#888;width:50px;">${this.sortMode==='TIME'?(i+1)+'位':''}</div><div style="flex-grow:1;font-size:16px;">${r.studentId}. ${r.studentName} (${r.attempt===1?'①':'②'})</div><div class="record-time">${r.timeStr}</div></div>`;
+                    container.appendChild(div);
                 });
             }
 
-            loadDataAndGoView() { if(!this.classes || this.classes.length === 0) return; this.state = 'VIEW'; document.getElementById('setup-panel').style.display = 'none'; document.getElementById('header-controls').style.display = 'none'; const listContainer = document.getElementById('record-list-container'); listContainer.style.display = 'flex'; listContainer.style.top = '120px'; listContainer.style.bottom = '90px'; listContainer.classList.add('compact-mode'); this.sortMode = 'ID'; this.renderViewList(); this.saveDataToStorage(true); }
-            renderViewList() { const container = document.getElementById('record-list-container'); if (!container) return; container.innerHTML = ""; const c = this.currentClass; if (!c) return; let sorted = [...c.records]; if (this.sortMode === 'TIME') sorted.sort((a,b) => a.timeMs - b.timeMs); else sorted.sort((a,b) => a.studentId - b.studentId); if (this.filterGender !== 'ALL') sorted = sorted.filter(r => { const s = c.students.find(stu => stu.id === r.studentId); return s && s.gender === this.filterGender; }); if (sorted.length === 0) { container.innerHTML = '<div style="text-align:center; padding:20px; color:#888;">データがありません</div>'; return; } sorted.forEach((r, i) => { const div = document.createElement('div'); div.className = 'record-row'; div.innerHTML = `<div style="display:flex; align-items:center; width:100%;"><div style="font-weight:bold; color:#888; width:60px;">${this.sortMode === 'TIME' ? (i+1)+'位' : ''}${r.attempt===1?'①':'②'}</div><div style="flex-grow:1; font-size:16px;">${r.studentId}. ${r.studentName}</div><div class="record-time">${r.timeStr}</div></div>`; container.appendChild(div); }); }
             formatTime(ms) { let d = new Date(ms); return `${String(d.getUTCMinutes()).padStart(2,'0')}:${String(d.getUTCSeconds()).padStart(2,'0')}.${String(Math.floor(d.getUTCMilliseconds()/10)).padStart(2,'0')}`; }
 
             loop() {
-                try {
-                    if (this.isRunning) this.elapsedTime = Date.now() - this.startTime;
-                    // 非表示時は描画をスキップしてCPU/メモリ負荷を軽減
-                    if (document.visibilityState === 'visible') {
-                        this.ctx.fillStyle = "#f2f2f7"; this.ctx.fillRect(0, 0, this.width, this.height);
-                        this.buttons = [];
-                        if (this.state === 'RECORD') this.drawRecordScreen(); else if (this.state === 'VIEW') this.drawViewScreen();
-                    }
-                } catch(e) {}
+                if (this.isRunning) this.elapsedTime = Date.now() - this.startTime;
+                if (document.visibilityState === 'visible') {
+                    this.ctx.fillStyle = "#f2f2f7"; this.ctx.fillRect(0, 0, this.width, this.height);
+                    this.buttons = [];
+                    if (this.state === 'RECORD') this.drawRecordScreen(); else if (this.state === 'VIEW') this.drawViewScreen();
+                }
                 requestAnimationFrame(this.loop);
             }
 
             drawRecordScreen() {
-                const cx = this.width / 2; const t = 130; 
-                this.ctx.fillStyle = "#fff"; this.ctx.roundRect(20, t, this.width - 40, 75, 15); this.ctx.fill();
-                this.ctx.fillStyle = "#333"; this.ctx.font = "bold 45px monospace"; this.ctx.textAlign = "center"; this.ctx.textBaseline = "middle";
-                this.ctx.fillText(this.formatTime(this.elapsedTime), cx, t + 37);
-                const bY = t + 85; const bW = (this.width - 60) / 2;
-                const allDone = this.isAllMeasured();
-                const startBtnText = this.isRunning ? "ストップ" : "スタート";
-                let startBtnColor = this.isRunning ? "#FF3B30" : "#34C759";
-                let startBtnAction = () => this.toggleTimer();
-                if (!this.isRunning && allDone) { startBtnColor = "#ccc"; startBtnAction = null; }
-                this.drawButton(20, bY, bW, 55, startBtnText, startBtnColor, startBtnAction);
-                this.drawButton(20 + bW + 20, bY, bW, 55, "リセット", "#8E8E93", () => this.openResetModal());
-                this.drawButton(40, bY + 65, this.width - 80, 65, "● 記録する", "#007AFF", () => this.recordLap());
-                this.drawButton(20, this.height - 70, this.width - 40, 50, "保存して確認", "#5856D6", () => this.saveAndGoView());
+                const cx = this.width / 2;
+                this.ctx.fillStyle = "#fff"; this.ctx.roundRect(20, 130, this.width - 40, 80, 15); this.ctx.fill();
+                this.ctx.fillStyle = "#333"; this.ctx.font = "bold 50px monospace"; this.ctx.textAlign = "center"; this.ctx.fillText(this.formatTime(this.elapsedTime), cx, 185);
+                
+                const bW = (this.width - 60) / 2;
+                this.drawButton(20, 220, bW, 60, this.isRunning ? "停止" : "開始", this.isRunning ? "#FF3B30" : "#34C759", () => this.toggleTimer());
+                this.drawButton(20 + bW + 20, 220, bW, 60, "リセット", "#8E8E93", () => this.openResetModal());
+                this.drawButton(30, 290, this.width - 60, 60, "● 記録", "#007AFF", () => this.recordLap());
+                this.drawButton(20, this.height - 75, this.width - 40, 55, "保存して一覧表示", "#5856D6", () => {
+                    const valid = this.sessionRecords.filter(r => r.studentId !== 9999).map(r => ({ ...r, studentName: this.classes[this.currentClassIdx].students.find(st => st.id === r.studentId).name }));
+                    this.classes[this.currentClassIdx].records = this.classes[this.currentClassIdx].records.concat(valid);
+                    this.saveDataToStorage(true); this.loadDataAndGoView();
+                });
             }
 
             drawViewScreen() {
-                this.ctx.fillStyle = "#333"; this.ctx.font = "bold 20px sans-serif"; this.ctx.textAlign = "center"; this.ctx.fillText("記録一覧", this.width / 2, 60);
+                this.ctx.fillStyle = "#333"; this.ctx.font = "bold 20px sans-serif"; this.ctx.textAlign = "center"; this.ctx.fillText("記録一覧", this.width / 2, 45);
                 const bW = (this.width - 60) / 2;
-                this.drawButton(20, 75, bW, 30, "タイム順", this.sortMode === 'TIME' ? "#007AFF" : "#ccc", () => { this.sortMode = 'TIME'; this.renderViewList(); });
-                this.drawButton(20 + bW + 20, 75, bW, 30, "出席番号順", this.sortMode === 'ID' ? "#007AFF" : "#ccc", () => { this.sortMode = 'ID'; this.renderViewList(); });
-                const fY = this.height - 60; const fW = (this.width - 40) / 3;
-                this.drawButton(10, fY, fW, 50, "計測へ", "#007AFF", () => this.backToRecord());
-                this.drawButton(10 + fW + 10, fY, fW, 50, "コピー", "#34C759", () => this.copyToClipboard());
-                this.drawButton(10 + (fW + 10) * 2, fY, fW, 50, "トップ", "#8E8E93", () => this.goHome());
+                this.drawButton(20, 60, bW, 35, "タイム順", this.sortMode === 'TIME' ? "#007AFF" : "#ccc", () => { this.sortMode = 'TIME'; this.renderViewList(); });
+                this.drawButton(20 + bW + 20, 60, bW, 35, "番号順", this.sortMode === 'ID' ? "#007AFF" : "#ccc", () => { this.sortMode = 'ID'; this.renderViewList(); });
+                const fW = (this.width - 40) / 3;
+                this.drawButton(10, this.height - 65, fW, 55, "戻る", "#007AFF", () => this.startApp());
+                this.drawButton(10 + fW + 10, this.height - 65, fW, 55, "コピー", "#34C759", () => this.copyToClipboard());
+                this.drawButton(10 + (fW + 10) * 2, this.height - 65, fW, 55, "トップ", "#8E8E93", () => this.goHome());
             }
 
             drawButton(x, y, w, h, text, color, onClick) {
-                if (this.activeButton && this.activeButton.x === x && this.activeButton.y === y) this.ctx.globalAlpha = 0.7;
-                this.ctx.fillStyle = color; this.ctx.beginPath(); this.ctx.roundRect(x, y, w, h, 10); this.ctx.fill();
+                if (this.activeButton && this.activeButton.x === x && this.activeButton.y === y) this.ctx.globalAlpha = 0.6;
+                this.ctx.fillStyle = color; this.ctx.beginPath(); this.ctx.roundRect(x, y, w, h, 12); this.ctx.fill();
                 this.ctx.globalAlpha = 1.0; this.ctx.fillStyle = "#fff"; this.ctx.font = `bold ${h < 40 ? 14 : 18}px sans-serif`;
                 this.ctx.textAlign = "center"; this.ctx.textBaseline = "middle"; this.ctx.fillText(text, x + w/2, y + h/2);
                 this.buttons.push({x, y, w, h, onClick});
             }
 
-            saveAndGoView() { if (this.sessionRecords.length > 0) { const v = this.sessionRecords.filter(r => r.studentId !== 9999); const c = this.currentClass; if (c) c.records = (c.records || []).concat(v); this.sessionRecords = []; } this.saveDataToStorage(true); this.loadDataAndGoView(); }
-            backToRecord() { this.state = 'RECORD'; this.startApp(); }
-            closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-            openResetModal() { document.getElementById('modal-options-default').style.display = 'flex'; document.getElementById('modal-options-confirm').style.display = 'none'; document.getElementById('modal-options-reset-all').style.display = 'none'; document.getElementById('modal-overlay').style.display = 'flex'; }
-            showClearConfirm() { document.getElementById('modal-options-default').style.display = 'none'; document.getElementById('modal-options-confirm').style.display = 'flex'; }
-            execReset(c) { this.resetTimer(c); this.closeModal(); }
-            handleInputStart(rX, rY) { const rect = this.container.getBoundingClientRect(); const x = rX - rect.left, y = rY - rect.top; for (let b of this.buttons) { if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { this.activeButton = b; return; } } }
-            handleInputMove() {}
-            handleInputEnd() { if (this.activeButton) { if(this.activeButton.onClick) this.activeButton.onClick(); this.activeButton = null; } }
-            copyToClipboard() { const c = this.currentClass; if(!c) return; let txt = `【${c.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`; [...(c.students || [])].sort((a,b)=>a.id-b.id).forEach(s => { const r1 = [...c.records].reverse().find(r => r.studentId === s.id && r.attempt === 1); const r2 = [...c.records].reverse().find(r => r.studentId === s.id && r.attempt === 2); txt += `${s.id}\t${s.name}\t${s.gender === 'M'?'男':'女'}\t${r1?r1.timeStr:''}\t${r2?r2.timeStr:''}\n`; }); const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); document.execCommand('copy'); alert("コピーしました！"); }
-            exportData() { const blob = new Blob([JSON.stringify({ classes: this.classes })], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `pe_data.json`; a.click(); }
-            importData() { document.getElementById('file-input').click(); }
-            handleFileSelect(e) { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const d = JSON.parse(ev.target.result); if(d && Array.isArray(d.classes)){ this.classes = d.classes; this.updateRegisteredClassesList(); this.saveDataToStorage(true); alert("読み込みました"); } } catch(e){ alert("失敗"); } }; r.readAsText(f); }
+            handleInputStart(x, y) { for (let b of this.buttons) { if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { this.activeButton = b; return; } } }
+            handleInputEnd() { if (this.activeButton && this.activeButton.onClick) this.activeButton.onClick(); this.activeButton = null; }
+            
+            copyToClipboard() {
+                const c = this.classes[this.currentClassIdx]; if(!c) return;
+                let txt = `【${c.name}】\n番号\t氏名\t性別\t1回目\t2回目\n`;
+                c.students.sort((a,b)=>a.id-b.id).forEach(s => {
+                    const r1 = [...c.records].reverse().find(r => r.studentId === s.id && r.attempt === 1);
+                    const r2 = [...c.records].reverse().find(r => r.studentId === s.id && r.attempt === 2);
+                    txt += `${s.id}\t${s.name}\t${s.gender==='M'?'男':'女'}\t${r1?r1.timeStr:''}\t${r2?r2.timeStr:''}\n`;
+                });
+                const ta = document.getElementById('clipboard-target'); ta.value = txt; ta.select(); document.execCommand('copy');
+            }
+            
+            exportData() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({ classes: this.classes })], { type: "application/json" })); a.download = `pe_data.json`; a.click(); }
+            handleFileSelect(e) { 
+                const f = e.target.files[0]; if(!f) return;
+                const r = new FileReader(); r.onload = ev => { try { const d = JSON.parse(ev.target.result); if(d.classes){ this.classes = d.classes; this.updateRegisteredClassesList(); this.saveDataToStorage(true); alert("読込完了"); } } catch(e){ alert("失敗"); } }; r.readAsText(f);
+            }
         }
 
         if (!CanvasRenderingContext2D.prototype.roundRect) {
