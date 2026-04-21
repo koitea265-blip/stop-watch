@@ -394,33 +394,32 @@
                 this.saveDataToStorage();
             }
 
-            // --- 全データ消去 (徹底強化) ---
+            openResetAllModal() {
+                document.getElementById('modal-options-default').style.display = 'none';
+                document.getElementById('modal-options-confirm').style.display = 'none';
+                document.getElementById('modal-options-reset-all').style.display = 'flex';
+                document.getElementById('modal-overlay').style.display = 'flex';
+            }
+
             execResetAllData() { 
-                // 1. ストレージの完全削除
                 try { 
                     localStorage.removeItem(this.STORAGE_KEY);
-                    localStorage.clear(); // 念のため
+                    localStorage.clear(); 
                 } catch(e) {} 
                 
-                // 2. 内部状態をクリーンにリセット
                 this.resetInternalState();
-
-                // 3. UI表示部品を即座にリセット
                 this.clearInputFields();
+                
                 const regList = document.getElementById('registered-classes-list');
                 if (regList) regList.innerText = "なし";
-                
                 const classSelector = document.getElementById('class-selector');
                 if (classSelector) classSelector.innerHTML = "";
-
                 const recContainer = document.getElementById('record-list-container');
                 if (recContainer) recContainer.innerHTML = "";
                 
-                // 4. HOME画面へ
                 this.goHome();
                 this.closeModal(); 
                 
-                // 5. 通知
                 const msg = document.getElementById('flash-message');
                 msg.innerText = "すべてのデータを消去しました";
                 msg.style.display = 'block';
